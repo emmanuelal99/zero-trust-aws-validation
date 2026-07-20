@@ -63,11 +63,6 @@ jobs:
         with:
           terraform_version: 1.9.8
           terraform_wrapper: false
-      - name: Debug OIDC identity
-        run: |
-          echo "repository = ${{ github.repository }}"
-          echo "ref        = ${{ github.ref }}"
-          echo "event      = ${{ github.event_name }}"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_PIPELINE_ROLE_ARN }}
