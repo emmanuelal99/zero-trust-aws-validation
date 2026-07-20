@@ -82,18 +82,19 @@ jobs:
         run: terraform apply -auto-approve tfplan
       - name: Export outputs
         id: out
+        shell: bash
         run: |
-          # name_prefix is derived from the env name, so it's always available.
+          # Plan-only runs deploy nothing, so `terraform output` may emit
+          # "Warning: No outputs found". set +e / exit 0 mean the step can never fail
+          # here regardless of what terraform prints, and the string guards ensure no
+          # warning text ever reaches $GITHUB_OUTPUT (which would fail with 'Invalid format').
+          set +e
           echo "name_prefix=${TARGET_ENV/environment-/env-}" >> "$GITHUB_OUTPUT"
-          # On plan-only runs nothing is deployed, so state has no outputs and
-          # `terraform output -raw app_url` prints "Warning: No outputs found" to stderr.
-          # Capture into a var (discard stderr, never fail under `set -e`) and only write
-          # app_url when it's genuinely non-empty, so the warning text can't leak into
-          # $GITHUB_OUTPUT (which would fail the step with 'Invalid format').
-          APP_URL="$(terraform output -raw app_url 2>/dev/null || true)"
-          if [ -n "$APP_URL" ]; then
+          APP_URL="$(terraform output -raw app_url 2>/dev/null)"
+          if [ -n "$APP_URL" ] && [[ "$APP_URL" != *"Warning"* ]] && [[ "$APP_URL" != *"No outputs"* ]]; then
             echo "app_url=$APP_URL" >> "$GITHUB_OUTPUT"
           fi
+          exit 0
 
   # ---------------------------------------------------------------------------
   # Stage 2 — Trivy (IaC scan)

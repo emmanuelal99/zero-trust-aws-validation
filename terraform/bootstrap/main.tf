@@ -104,11 +104,15 @@ data "aws_iam_policy_document" "pipeline_assume" {
       values   = ["sts.amazonaws.com"]
     }
 
-    # Restrict to this repo (any branch / workflow_dispatch ref).
+    # Scope on `sub` (the claim AWS mandates). This account's `sub` embeds numeric IDs
+    # (repo:owner@<id>/repo@<id>:ref:refs/heads/<branch>), so the wildcards after the
+    # owner and repo names absorb the `@<id>` suffixes while still pinning this exact
+    # owner/repo and restricting to branch refs only. `github_repo` = "owner/repo" is
+    # split so the `*` lands between name and suffix, not across the `/`.
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:*"]
+      values   = ["repo:${split("/", var.github_repo)[0]}*/${split("/", var.github_repo)[1]}*:ref:refs/heads/*"]
     }
   }
 }
