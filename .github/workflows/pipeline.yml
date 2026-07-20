@@ -82,9 +82,16 @@ jobs:
       - name: Export outputs
         id: out
         run: |
+          # name_prefix is derived from the env name, so it's always available.
           echo "name_prefix=${TARGET_ENV/environment-/env-}" >> "$GITHUB_OUTPUT"
-          if terraform output -raw app_url >/dev/null 2>&1; then
-            echo "app_url=$(terraform output -raw app_url)" >> "$GITHUB_OUTPUT"
+          # On plan-only runs nothing is deployed, so state has no outputs and
+          # `terraform output -raw app_url` prints "Warning: No outputs found" to stderr.
+          # Capture into a var (discard stderr, never fail under `set -e`) and only write
+          # app_url when it's genuinely non-empty, so the warning text can't leak into
+          # $GITHUB_OUTPUT (which would fail the step with 'Invalid format').
+          APP_URL="$(terraform output -raw app_url 2>/dev/null || true)"
+          if [ -n "$APP_URL" ]; then
+            echo "app_url=$APP_URL" >> "$GITHUB_OUTPUT"
           fi
 
   # ---------------------------------------------------------------------------
@@ -385,7 +392,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1..9.8
+          terraform_version: 1.9.8
           terraform_wrapper: false
       - uses: actions/setup-python@v5
         with:
