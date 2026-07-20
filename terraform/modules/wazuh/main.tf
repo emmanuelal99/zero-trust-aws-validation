@@ -141,7 +141,7 @@ resource "aws_instance" "wazuh" {
     dnf -y update
     curl -sO https://packages.wazuh.com/4.9/wazuh-install.sh
     bash ./wazuh-install.sh -a -i || echo "WARN: wazuh-install returned non-zero"
-    %{ if local.cloud_detection ~}
+    %{if local.cloud_detection~}
 
     # -----------------------------------------------------------------------
     # Cloud detection (Environment B): poll the CloudTrail bucket via the Wazuh
@@ -210,7 +210,7 @@ resource "aws_instance" "wazuh" {
         open(p, "w").write(s)
     PYEOF
     systemctl restart wazuh-manager || echo "WARN: wazuh-manager restart failed"
-    %{ endif ~}
+    %{endif~}
   EOF
 
   tags = merge(local.tags, { Name = "${var.name_prefix}-wazuh" })
