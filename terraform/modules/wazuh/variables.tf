@@ -48,8 +48,14 @@ variable "aws_region" {
   default     = "eu-west-2"
 }
 
+variable "enable_cloud_detection" {
+  description = "Static flag gating the CloudTrail wodle + AWS rules (Env B = true, Env A = false). Drives count/for_each, so it MUST be a plan-time constant — do NOT derive it from a computed resource attribute (e.g. the trail bucket ARN), or a fresh-state plan fails with 'count depends on resource attributes that cannot be determined until apply'."
+  type        = bool
+  default     = false
+}
+
 variable "trail_bucket_name" {
-  description = "CloudTrail log bucket the wodle polls. Empty disables cloud detection (Env A)."
+  description = "CloudTrail log bucket the wodle polls. May be a computed attribute — only ever used as a value inside resource bodies, never to gate count."
   type        = string
   default     = ""
 }

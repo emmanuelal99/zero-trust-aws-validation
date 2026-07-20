@@ -186,14 +186,15 @@ module "wazuh" {
   source = "../../modules/wazuh"
   count  = var.deploy_wazuh ? 1 : 0
 
-  name_prefix       = var.name_prefix
-  vpc_id            = module.networking.vpc_id
-  subnet_id         = module.networking.private_subnet_ids[0]
-  vpc_cidr          = module.networking.vpc_cidr
-  admin_cidr        = var.admin_cidr
-  aws_region        = var.aws_region
-  trail_bucket_name = module.cloudtrail.trail_bucket_name
-  trail_bucket_arn  = module.cloudtrail.trail_bucket_arn
+  name_prefix            = var.name_prefix
+  vpc_id                 = module.networking.vpc_id
+  subnet_id              = module.networking.private_subnet_ids[0]
+  vpc_cidr               = module.networking.vpc_cidr
+  admin_cidr             = var.admin_cidr
+  aws_region             = var.aws_region
+  enable_cloud_detection = true # static: Env B runs the CloudTrail -> Wazuh detection path
+  trail_bucket_name      = module.cloudtrail.trail_bucket_name
+  trail_bucket_arn       = module.cloudtrail.trail_bucket_arn
 }
 
 # ---------------------------------------------------------------------------

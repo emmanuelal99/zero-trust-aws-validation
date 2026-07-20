@@ -3,10 +3,12 @@
 
 locals {
   tags = merge(var.tags, { Component = "wazuh" })
-  # Cloud detection (CloudTrail wodle + AWS rules) only where a trail bucket is supplied.
-  # Env B passes the trail bucket; Env A leaves it empty -> no cloud detection, MTTD
-  # coverage = 0 by design (the perimeter-baseline finding).
-  cloud_detection = var.trail_bucket_name != "" && var.trail_bucket_arn != ""
+  # Cloud detection (CloudTrail wodle + AWS rules) gated by a STATIC flag so the count
+  # guards below resolve at plan time. Env B sets enable_cloud_detection = true; Env A
+  # leaves it false -> no cloud detection, MTTD coverage = 0 by design (the perimeter-
+  # baseline finding). The trail bucket name/arn are still passed in as VALUES, but they
+  # must not gate count (they are computed and unknown on a fresh-state plan).
+  cloud_detection = var.enable_cloud_detection
 }
 
 # ---------------------------------------------------------------------------
