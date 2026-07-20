@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars and adjust. terraform.tfvars is git-ignored.
+aws_region  = "eu-west-2"
+name_prefix = "env-b"
+
+# No public SSH under Zero Trust. admin_cidr only gates the Wazuh dashboard (443);
+# narrow it to your IP.
+admin_cidr = "0.0.0.0/0"
+
+instance_type     = "t3.micro"
+db_instance_class = "db.t3.micro"
+db_name           = "logitrack"
+db_username       = "logitrack"
+
+deploy_wazuh = true
+
+# Identity-aware access is OFF for now (WAF-only at the edge). To enable Cognito OIDC:
+#   identity_aware_auth   = true
+#   cognito_callback_urls = ["https://<alb-dns-name>/oauth2/idpresponse"]
+identity_aware_auth = false

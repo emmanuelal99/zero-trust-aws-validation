@@ -1,0 +1,773 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Track Shipment | {{ shipment.tracking_id }} — LogiTrack</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'style.css' %}">
+  <style>
+    /* ── TRACKING PAGE OVERRIDES ── */
+    :root {
+      --red:    #d40511;
+      --yellow: #ffcc00;
+      --dark:   #111;
+      --mid:    #1e1e1e;
+      --light-bg: #f7f7f7;
+      --white:  #ffffff;
+      --text:   #333;
+      --text-light: #777;
+      --success: #28a745;
+      --border: #e4e4e4;
+      --shadow: 0 4px 24px rgba(0,0,0,0.08);
+    }
+
+    /* PAGE SHELL */
+    .tracking-page-shell {
+      background: var(--light-bg);
+      min-height: 100vh;
+      padding-bottom: 80px;
+    }
+
+    /* TRACKING HERO BANNER */
+    .tracking-hero {
+      background: var(--dark);
+      padding: 48px 0 40px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .tracking-hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 40px,
+        rgba(255,255,255,0.015) 40px,
+        rgba(255,255,255,0.015) 41px
+      );
+      pointer-events: none;
+    }
+
+    .tracking-hero-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 32px;
+      position: relative;
+    }
+
+    .tracking-breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.82rem;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 18px;
+    }
+
+    .tracking-breadcrumb a {
+      color: rgba(255,255,255,0.45);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .tracking-breadcrumb a:hover { color: var(--yellow); }
+    .tracking-breadcrumb .sep { opacity: 0.4; }
+    .tracking-breadcrumb .current { color: rgba(255,255,255,0.7); }
+
+    .tracking-hero-title {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 800;
+      color: var(--white);
+      margin: 0 0 6px;
+      letter-spacing: -0.5px;
+      text-transform: uppercase;
+    }
+
+    .tracking-hero-title span { color: var(--yellow); }
+
+    .tracking-id-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.9rem;
+      color: rgba(255,255,255,0.8);
+      margin-top: 14px;
+    }
+
+    .tracking-id-badge strong {
+      color: var(--yellow);
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .tracking-id-badge .badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 0 3px rgba(40,167,69,0.2);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { box-shadow: 0 0 0 3px rgba(40,167,69,0.2); }
+      50%       { box-shadow: 0 0 0 6px rgba(40,167,69,0.1); }
+    }
+
+    .tracking-route-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255,204,0,0.08);
+      border: 1px solid rgba(255,204,0,0.2);
+      border-radius: 40px;
+      padding: 6px 16px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.82rem;
+      color: rgba(255,255,255,0.7);
+      margin-top: 10px;
+    }
+
+    .tracking-route-pill .arrow { color: var(--yellow); font-weight: 700; }
+
+    /* MAIN CONTENT */
+    .tracking-main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 40px 32px 0;
+    }
+
+    /* FLASH MESSAGES */
+    .alert {
+      padding: 14px 18px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .alert-success {
+      background: #edfbf1;
+      color: #1a6b33;
+      border: 1px solid #b6e8c8;
+    }
+
+    .alert-error {
+      background: #fff0f0;
+      color: #8b1a1a;
+      border: 1px solid #f5c6c6;
+    }
+
+    /* SECTION LABEL */
+    .sl-section-label {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--red);
+      margin-bottom: 6px;
+    }
+
+    /* CARD */
+    .sl-card {
+      background: var(--white);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      padding: 28px 28px;
+      margin-bottom: 24px;
+    }
+
+    .sl-card h3 {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--dark);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 0 0 20px;
+    }
+
+    /* DASHBOARD ROW */
+    .dashboard-row {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    @media (max-width: 700px) {
+      .dashboard-row { grid-template-columns: 1fr; }
+    }
+
+    /* STATUS PILL */
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .status-label {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-light);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 14px;
+      border-radius: 40px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.82rem;
+      font-weight: 700;
+      background: rgba(40,167,69,0.1);
+      color: var(--success);
+      border: 1px solid rgba(40,167,69,0.2);
+    }
+
+    .status-pill.on-hold {
+      background: rgba(212,5,17,0.08);
+      color: var(--red);
+      border-color: rgba(212,5,17,0.2);
+    }
+
+    .status-pill::before {
+      content: '';
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* PROGRESS BAR */
+    .progress-bar-container {
+      width: 100%;
+      height: 22px;
+      background: #ebebeb;
+      border-radius: 11px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--success), #4ccc6e);
+      border-radius: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0 12px;
+      color: white;
+      font-weight: 700;
+      font-size: 11px;
+      font-family: 'DM Sans', sans-serif;
+      transition: width 0.6s cubic-bezier(.4,0,.2,1);
+      min-width: 56px;
+      white-space: nowrap;
+    }
+
+    .progress-bar-fill.on-hold {
+      background: linear-gradient(90deg, var(--red), #ff4455);
+    }
+
+    .route-labels {
+      display: flex;
+      justify-content: space-between;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.75rem;
+      color: var(--text-light);
+      margin-top: 6px;
+    }
+
+    /* MAP */
+    #map {
+      width: 100%;
+      height: 280px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    /* TIMELINE */
+    .timeline {
+      position: relative;
+      padding-left: 32px;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 8px;
+      top: 8px;
+      bottom: 8px;
+      width: 2px;
+      background: var(--border);
+      border-radius: 2px;
+    }
+
+    .timeline-event {
+      position: relative;
+      margin-bottom: 28px;
+    }
+
+    .timeline-event:last-child { margin-bottom: 0; }
+
+    .timeline-event::before {
+      content: '';
+      position: absolute;
+      left: -32px;
+      top: 6px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--red);
+      border: 3px solid var(--white);
+      box-shadow: 0 0 0 2px var(--red);
+    }
+
+    .timeline-event:first-child::before {
+      background: var(--yellow);
+      box-shadow: 0 0 0 2px var(--yellow);
+    }
+
+    .event-date {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.75rem;
+      color: var(--text-light);
+      margin-bottom: 4px;
+    }
+
+    .event-status {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--dark);
+      letter-spacing: 0.3px;
+    }
+
+    .event-location {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.82rem;
+      color: var(--text-light);
+      margin-top: 3px;
+    }
+
+    /* SUPPORT SECTION */
+    .support-section {
+      background: var(--dark);
+      border-radius: 12px;
+      padding: 32px 28px;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .support-section::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 40px,
+        rgba(255,255,255,0.015) 40px,
+        rgba(255,255,255,0.015) 41px
+      );
+      pointer-events: none;
+    }
+
+    .support-section h3 {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--white);
+      text-transform: uppercase;
+      margin: 0 0 6px;
+      position: relative;
+    }
+
+    .support-section h3 span { color: var(--yellow); }
+
+    .support-section > p {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.88rem;
+      color: rgba(255,255,255,0.5);
+      margin: 0 0 24px;
+      position: relative;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+      position: relative;
+    }
+
+    .form-group label {
+      display: block;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 6px;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 12px 14px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      color: var(--white);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.9rem;
+      box-sizing: border-box;
+      transition: border-color 0.2s, background 0.2s;
+      outline: none;
+    }
+
+    .form-control::placeholder { color: rgba(255,255,255,0.25); }
+
+    .form-control:focus {
+      border-color: var(--yellow);
+      background: var(--white);
+      color: var(--dark);
+    }
+
+    .btn-submit {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--yellow);
+      color: var(--dark);
+      padding: 12px 28px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      transition: background 0.2s, transform 0.15s;
+      position: relative;
+    }
+
+    .btn-submit:hover {
+      background: #e6b800;
+      transform: translateY(-1px);
+    }
+
+    .btn-submit:active { transform: translateY(0); }
+
+    /* DISTANCE STAT BAR */
+    .distance-stat-bar {
+      display: flex;
+      gap: 1px;
+      background: var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 24px;
+      border: 1px solid var(--border);
+    }
+
+    .dist-stat {
+      flex: 1;
+      background: var(--white);
+      padding: 16px 20px;
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    .dist-stat-val {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--dark);
+      letter-spacing: -0.5px;
+    }
+
+    .dist-stat-key {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-light);
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- CUSTOM CURSOR -->
+  <div class="cursor-dot"></div>
+  <div class="cursor-ring"></div>
+
+  <!-- SCROLL PROGRESS -->
+  <div id="scroll-progress"></div>
+
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <div class="logo">
+      <div class="logo-icon">LG</div>
+      <span>LogiTrack</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="{% url 'homepage' %}">Home</a></li>
+      <li><a href="{% url 'about_page' %}">About</a></li>
+      <li><a href="{% url 'service_page' %}">Services</a></li>
+      <li><a href="{% url 'contact_page' %}">Contact</a></li>
+      <li><a href="{% url 'homepage'  %}" class="nav-cta">Track Your Package</a></li>
+      </ul>
+    <div class="hamburger">
+      <span></span><span></span><span></span>
+    </div>
+  </nav>
+
+  <!-- TRACKING HERO BANNER -->
+  <div class="tracking-hero">
+    <div class="tracking-hero-inner">
+      <div class="tracking-breadcrumb">
+        <a href="{% url 'homepage' %}">Home</a>
+        <span class="sep">›</span>
+        <span class="current">Shipment Tracking</span>
+      </div>
+      <h1 class="tracking-hero-title">Shipment <span>Tracker</span></h1>
+      <div class="tracking-id-badge">
+        <span class="badge-dot"></span>
+        Tracking ID: <strong>{{ shipment.tracking_id }}</strong>
+      </div>
+      <br>
+      <div class="tracking-route-pill">
+        {{ shipment.origin }}
+        <span class="arrow">→</span>
+        {{ shipment.destination }}
+        &nbsp;·&nbsp; {{ shipment.total_distance }} Miles
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="tracking-page-shell">
+    <div class="tracking-main">
+
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+
+      <!-- STAT BAR -->
+      <div class="distance-stat-bar">
+        <div class="dist-stat">
+          <div class="dist-stat-val">{{ shipment.total_distance }}</div>
+          <div class="dist-stat-key">Total Miles</div>
+        </div>
+        <div class="dist-stat">
+          <div class="dist-stat-val">{{ progress_percent|default:0 }}%</div>
+          <div class="dist-stat-key">Journey Complete</div>
+        </div>
+        <div class="dist-stat">
+          <div class="dist-stat-val">{{ current_status.status|default:"Processing" }}</div>
+          <div class="dist-stat-key">Current Status</div>
+        </div>
+      </div>
+
+      <!-- DASHBOARD ROW -->
+      <div class="dashboard-row">
+
+        <!-- PROGRESS CARD -->
+        <div class="sl-card">
+          <div class="sl-section-label">Live Progress</div>
+          <h3>Journey Status</h3>
+
+          <div class="status-row">
+            <span class="status-label">Status</span>
+            <span class="status-pill {% if current_status.status == 'ON_HOLD' %}on-hold{% endif %}">
+              {{ current_status.status|default:"Processing" }}
+            </span>
+          </div>
+
+          <p style="font-family:'DM Sans',sans-serif;font-size:0.88rem;color:var(--text-light);margin:0 0 16px;">
+            {{ current_status.description|default:"Awaiting collection." }}
+          </p>
+
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill {% if current_status.status == 'ON_HOLD' %}on-hold{% endif %}"
+                 style="width: {{ progress_percent|default:0 }}%;">
+              {{ progress_percent|default:0 }}%
+            </div>
+          </div>
+
+          <div class="route-labels">
+            {% for waypoint in waypoints %}
+              <span>{{ waypoint.location_name }}</span>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- MAP CARD -->
+        <div class="sl-card" style="padding:0;overflow:hidden;">
+          <div id="map"></div>
+        </div>
+
+      </div>
+
+      <!-- TRACKING HISTORY -->
+      <div class="sl-card">
+        <div class="sl-section-label">History</div>
+        <h3>Tracking Timeline</h3>
+        <div class="timeline">
+          {% for event in events %}
+            <div class="timeline-event">
+              <div class="event-date">{{ event.timestamp|date:"F j, Y — H:i" }}</div>
+              <div class="event-status">{{ event.status }} — {{ event.description }}</div>
+              <div class="event-location">📍 {{ event.location }}</div>
+            </div>
+          {% empty %}
+            <div class="timeline-event">
+              <div class="event-date">Now</div>
+              <div class="event-status">Shipment Pending</div>
+              <div class="event-location">Information received by carrier.</div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- SUPPORT SECTION -->
+      <div class="support-section">
+        <h3>Need <span>Help</span> with this Shipment?</h3>
+        <p>Send a message directly to our dispatch team and we'll reply to your email within 2 hours.</p>
+
+        <form action="{% url 'submit_ticket' shipment.tracking_id %}" method="POST">
+          {% csrf_token %}
+          <div class="form-group">
+            <label for="customer_email">Your Email Address</label>
+            <input type="email" id="customer_email" name="customer_email"
+                   class="form-control" placeholder="name@example.com" required>
+          </div>
+          <div class="form-group">
+            <label for="customer_message">Message</label>
+            <textarea id="customer_message" name="customer_message"
+                      class="form-control" rows="4"
+                      placeholder="How can we help you today?" required></textarea>
+          </div>
+          <button type="submit" class="btn-submit">✉ Submit Ticket</button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="logo" style="margin-bottom: 0;">
+          <div class="logo-icon">LG</div>
+          Logi<span>Track</span>
+        </div>
+        <p>Global logistics partner for businesses of all sizes. Delivering certainty from origin to destination since 2026.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Services</h4>
+        <ul>
+          <li><a href="{% url 'service_page' %}">International Express</a></li>
+          <li><a href="{% url 'service_page' %}">Ocean Freight</a></li>
+          <li><a href="{% url 'service_page' %}">Road Freight</a></li>
+          <li><a href="{% url 'service_page' %}">Warehousing</a></li>
+          <li><a href="{% url 'service_page' %}">Customs Clearance</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="{% url 'about_page' %}">About Us</a></li>
+          <li><a href="{% url 'about_page' %}">Our Team</a></li>
+          <li><a href="#">Careers</a></li>
+          <li><a href="#">Newsroom</a></li>
+          <li><a href="{% url 'contact_page' %}">Contact</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <ul>
+          <li><a href="#">Track a Shipment</a></li>
+          <li><a href="#">Help Center</a></li>
+          <li><a href="#">API Docs</a></li>
+          <li><a href="#">Service Status</a></li>
+          <li><a href="#">Report an Issue</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 LogiTrack Logistics Ltd. All rights reserved.</span>
+      <div class="footer-bottom-links">
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+        <a href="#">Cookie Policy</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- LEAFLET (tracking map) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const waypoints = JSON.parse('{{ waypoints_json|safe }}');
+
+      // Check if we have valid GPS data
+      if (waypoints.length === 0 || (waypoints[0].lat === 0 && waypoints[0].lng === 0)) {
+        document.getElementById('map').innerHTML = "<p style='padding:20px;font-family:\"DM Sans\",sans-serif;color:#777;'>Map unavailable for these addresses.</p>";
+        return;
+      }
+
+      // Initialize the map
+      const map = L.map('map');
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap'
+      }).addTo(map);
+
+      const routeCoords = [];
+
+      // Add the blue pins for each stop
+      waypoints.forEach(stop => {
+        const pos = [stop.lat, stop.lng];
+        routeCoords.push(pos);
+        L.marker(pos).addTo(map).bindPopup(`<b>${stop.name}</b><br>Status: ${stop.status}`);
+      });
+
+      // Draw the static red route line
+      const polyline = L.polyline(routeCoords, { color: '#d40511', weight: 4 }).addTo(map);
+      
+      // Zoom out perfectly to fit the whole route on the screen
+      map.fitBounds(polyline.getBounds(), { padding: [30, 30] });
+    });
+  </script>
+
+  <script src="{% static 'main.js' %}"></script>
+</body>
+</html>

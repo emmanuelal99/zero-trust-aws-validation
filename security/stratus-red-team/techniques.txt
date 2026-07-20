@@ -1,0 +1,23 @@
+# Stratus Red Team technique selection for the attack pipeline.
+#
+# One technique id per line. Blank lines and #-comments are skipped by the Stratus job.
+# Each id is detonated with `stratus detonate`, then `stratus cleanup --all` runs at the end,
+# so every technique stands up and tears down its own AWS resources (low blast radius).
+#
+# These five are chosen to map 1:1 onto the entries already stubbed in
+# metrics/mttd_signatures.yaml, so ASR (denominator = 5 detonations) and MTTD (up to 5
+# detectable actions) both produce real numbers on the first run. Keep this list and the
+# signature map in lockstep: the `technique` here == the `technique` key there, verbatim.
+
+# Defense evasion — tampering with CloudTrail (MITRE T1562.008).
+aws.defense-evasion.cloudtrail-stop
+aws.defense-evasion.cloudtrail-delete
+
+# Persistence — create an over-privileged IAM user (MITRE T1136.003).
+aws.persistence.iam-create-admin-user
+
+# Credential access — bulk-read Secrets Manager secrets (MITRE T1552.007).
+aws.credential-access.secretsmanager-batch-retrieve-secrets
+
+# Exfiltration / defense evasion — open :22 to the world on a security group (MITRE T1562.007).
+aws.exfiltration.ec2-security-group-open-port-22-ingress

@@ -1,0 +1,252 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>About Us — LogiTrack Global Logistics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'style.css' %}">
+</head>
+<body>
+
+  <!-- PAGE LOADER -->
+  <div id="page-loader">
+    <div class="loader-logo">Logi<span>Track</span></div>
+    
+    <div class="loader-bar-track"><div class="loader-bar-fill"></div></div>
+    <div class="loader-text">Initialising…</div>
+  </div>
+
+  <!-- PAGE TRANSITION OVERLAY -->
+  <div id="page-transition"></div>
+
+  <!-- CUSTOM CURSOR -->
+  <div class="cursor-dot"></div>
+  <div class="cursor-ring"></div>
+
+  <!-- SCROLL PROGRESS -->
+  <div id="scroll-progress"></div>
+
+  <!-- TOAST CONTAINER -->
+  <div id="toast-container"></div>
+
+
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <div class="logo">
+      <div class="logo-icon">LG</div>
+      <span>LogiTrack</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="{% url 'homepage' %}">Home</a></li>
+      <li><a href="{% url 'about_page' %}" class="active">About</a></li>
+      <li><a href="{% url 'service_page' %}">Services</a></li>
+      <li><a href="{% url 'contact_page' %}">Contact</a></li>
+      <li><a href="{% url 'homepage'  %}" class="nav-cta">Track Your Package</a></li>
+    </ul>
+    <div class="hamburger"><span></span><span></span><span></span></div>
+  </nav>
+
+  <!-- LIVE CLOCK BAR -->
+  <div class="live-clock-bar">
+    <span class="live-badge">Live</span>
+    <span class="clock-zone"><span class="clock-flag">🇬🇧</span> LON <strong id="clock-lon">--:--:--</strong></span>
+    <span class="clock-zone"><span class="clock-flag">🇩🇪</span> FRA <strong id="clock-fra">--:--:--</strong></span>
+    <span class="clock-zone"><span class="clock-flag">🇦🇪</span> DXB <strong id="clock-dxb">--:--:--</strong></span>
+    <span class="clock-zone"><span class="clock-flag">🇸🇬</span> SGP <strong id="clock-sgp">--:--:--</strong></span>
+    <span class="clock-zone"><span class="clock-flag">🇺🇸</span> NYC <strong id="clock-nyc">--:--:--</strong></span>
+  </div>
+  <!-- PAGE HERO -->
+  <div class="page-hero">
+    <div class="breadcrumb">
+      <a href="{% url 'homepage' %}">Home</a>
+      <span>›</span>
+      <span>About Us</span>
+    </div>
+    <h1>Our Story</h1>
+    <p>Moving the world's most important shipments.</p>
+  </div>
+
+  <!-- ABOUT SECTION -->
+  <div style="background: white;">
+    <div class="section">
+      <div class="about-grid">
+        <div class="about-img reveal">
+          <img src="https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=900&q=80" alt="LogiTrack operations" />
+        </div>
+        <div class="about-text reveal">
+          <p class="section-tag">Who We Are</p>
+          <h2 class="section-title">Born to <em>Connect</em><br>the World</h2>
+          <p style="color: var(--gray); line-height: 1.8; margin-bottom: 18px;">Founded in 2026, in Greater Manchester, LogiTrack started as a small freight forwarding company with a single truck and a bold vision: make global shipping as easy as sending a local parcel.</p>
+          <p style="color: var(--gray); line-height: 1.8; margin-bottom: 18px;">Today, we operate in Europe, move over 5 thousand shipments per year, and employ 100 logistics professionals worldwide. But our founding principle hasn't changed — every shipment matters.</p>
+          <p style="color: var(--gray); line-height: 1.8;">Our proprietary TrackSphere platform gives customers live visibility across air, sea, and road networks — delivering the confidence that comes from always knowing where your cargo is.</p>
+
+          <div class="values-grid" style="margin-top: 36px;">
+            <div class="value-card reveal">
+              <h4>🎯 Precision</h4>
+              <p>Every delivery promise we make is backed by data, infrastructure, and accountability.</p>
+            </div>
+            <div class="value-card reveal">
+              <h4>🌍 Reach</h4>
+              <p>The world's most connected logistics network — no destination is out of scope.</p>
+            </div>
+            <div class="value-card reveal">
+              <h4>🔒 Trust</h4>
+              <p>ISO 9001 certified operations with 100% record of reliability and security.</p>
+            </div>
+            <div class="value-card reveal">
+              <h4>⚡ Speed</h4>
+              <p>Next-business-day options across Europe and express air freight globally.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="stat-num" data-target="80" data-suffix="+">0</div>
+      <div class="stat-label">Countries</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" data-target="1000" data-suffix="+">0</div>
+      <div class="stat-label">Employees</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" data-target="50" data-suffix="+">0</div>
+      <div class="stat-label">Warehouse Hubs</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" data-target="2" data-suffix=" yrs">0</div>
+      <div class="stat-label">In Business</div>
+    </div>
+  </div>
+
+  <!-- MISSION SECTION -->
+  <div class="why-section">
+    <div class="why-inner">
+      <div class="why-content reveal">
+        <p class="section-tag" style="color: rgba(255,204,0,0.8);">Our Mission</p>
+        <h2 class="section-title" style="color: white;">Moving <em style="color: var(--yellow);">Commerce</em><br>Forward, Always</h2>
+        <p class="section-sub">Global trade depends on logistics that just works. We invest relentlessly in technology, people, and infrastructure to make that a reality for every one of our customers.</p>
+        <div class="why-list">
+          <div class="why-item">
+            <div class="why-check">✓</div>
+            <div><h4>Technology-Driven</h4><p>Invested in logistics technology, AI routing, and tracking infrastructure in 2026 alone.</p></div>
+          </div>
+          <div class="why-item">
+            <div class="why-check">✓</div>
+            <div><h4>Sustainability Committed</h4><p>Net-zero emissions target by 2030. Our electric delivery fleet is the largest in Europe.</p></div>
+          </div>
+          <div class="why-item">
+            <div class="why-check">✓</div>
+            <div><h4>People First</h4><p>Our drivers, warehouse teams, and account managers are the heartbeat of LogiTrack's reliability.</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="why-visual reveal">
+        <img src="https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=800&q=80" alt="Team at work" />
+        <div class="why-visual-badge">
+          <strong>#1</strong>
+          <span>Rated EU Carrier</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TEAM -->
+  <div style="background: var(--off-white); padding: 0 0 0 0;">
+    <div class="section">
+      <p class="section-tag reveal">The People</p>
+      <h2 class="section-title reveal">Leadership <em>Team</em></h2>
+      <p class="section-sub reveal">Experienced logistics professionals united by one mission: delivering certainty.</p>
+
+      <div class="team-grid">
+        <div class="team-card reveal">
+          <div class="team-photo">EA</div>
+          <h3>Emmanuel</h3>
+          <span>Logistic Expert</span>
+          <p style="font-size:0.83rem; color:var(--gray); margin-top:8px;">2 years as a logistics expert</p>
+        </div>
+        <div class="team-card reveal">
+          <div class="team-photo" style="background: linear-gradient(135deg, #1565c0, #0d47a1);">AY</div>
+          <h3>Ayodele</h3>
+          <span>Chief Technology Officer</span>
+          <p style="font-size:0.83rem; color:var(--gray); margin-top:8px;">Built TrackSphere from scratch.</p>
+        </div>
+        <div class="team-card reveal">
+          <div class="team-photo" style="background: linear-gradient(135deg, #2e7d32, #1b5e20);">IS</div>
+          <h3>Islam</h3>
+          <span>Chief Operations Officer</span>
+          <p style="font-size:0.83rem; color:var(--gray); margin-top:8px;">Oversees 50+ warehouse hubs across 2 continents.</p>
+        </div>
+        <div class="team-photo-wrap team-card reveal">
+          <div class="team-photo" style="background: linear-gradient(135deg, #7b1fa2, #4a148c);">AL</div>
+          <h3>AL</h3>
+          <span>Regional Manager</span>
+          <p style="font-size:0.83rem; color:var(--gray); margin-top:8px;">Manages our fastest-growing region.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-band">
+    <h2>Partner With Us</h2>
+    <p>Ready to experience logistics that truly works? Let's talk.</p>
+    <div class="cta-btns">
+      <a href="{% url 'contact_page' %}" class="btn btn-white">Contact Us →</a>
+      <a href="{% url 'service_page' %}" class="btn btn-outline">Our Services</a>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="logo"><div class="logo-icon">LG</div>Logi<span>Track</span></div>
+        <p>Global logistics partner for businesses of all sizes. Delivering certainty from origin to destination since 2026.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Services</h4>
+        <ul>
+          <li><a href="{% url 'service_page' %}">International Express</a></li>
+          <li><a href="{% url 'service_page' %}">Ocean Freight</a></li>
+          <li><a href="{% url 'service_page' %}">Road Freight</a></li>
+          <li><a href="{% url 'service_page' %}">Warehousing</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="{% url 'about_page' %}">About Us</a></li>
+          <li><a href="#">Careers</a></li>
+          <li><a href="#">Newsroom</a></li>
+          <li><a href="{% url 'contact_page' %}">Contact</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <ul>
+          <li><a href="{% url 'homepage' %}">Track a Shipment</a></li>
+          <li><a href="#">Help Center</a></li>
+          <li><a href="#">Service Status</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 LogiTrack Logistics Ltd. All rights reserved.</span>
+      <div class="footer-bottom-links">
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="{% static 'main.js' %}"></script>
+</body>
+</html>

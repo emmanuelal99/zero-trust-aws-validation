@@ -1,0 +1,57 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+!example.tfvars
+!*.example.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+*.tfplan
+.terraform.lock.hcl
+
+# Secrets / credentials
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+credentials
+*_accessKeys.csv
+
+# Tool output / scan reports
+security/**/output/
+security/**/reports/
+*.sarif
+prowler-output/
+nuclei-output/
+stratus-state/
+
+# Metrics working data
+metrics/data/*.raw
+metrics/data/*.json
+!metrics/data/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Terraform-generated app build artifacts
+**/.build/
+
+

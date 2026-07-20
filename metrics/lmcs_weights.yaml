@@ -1,0 +1,57 @@
+# LMCS — criticality weights and node set for the Lateral Movement Capability Score.
+#
+#   LMCS = (Σ V_i · W_i) / K_max ,  K_max = Σ W_i
+#
+# ALL-PAIRS (blast-radius) form: the index i ranges over ordered (source -> target) node
+# pairs; V_i = binary reachability of that pair; W_i = the DESTINATION node's weight; K_max =
+# Σ W_i over all pairs = the full-mesh maximum. LMCS measures how much of the weighted
+# environment is traversable (lower = better containment). Restricting to one source with
+# `--foothold` recovers the original single-foothold Eq 3.2 as a special case.
+#
+# V_i is derived OFFLINE from the Terraform state security-group graph (see
+# metrics/compute_metrics.py::compute_lmcs). A (source -> target) pair is reachable when a
+# port is permitted by BOTH the source SG egress AND the target SG ingress (transitively).
+#
+# These weights are a DRAFT for review — adjust the numbers, not the structure. They MUST
+# stay identical for Env A and Env B: LMCS is a controlled A/B comparison, so any change
+# must be applied to both. Weights are abstract in Chapter 3 (W_i = "criticality"); the
+# scheme below reflects blast-radius severity (data store / secrets highest).
+
+# SG name-suffix used to resolve the interface-VPC-endpoint SG for 'service' nodes.
+endpoint_sg_suffix: "vpce-sg"
+
+# Sources are the network nodes below (those with an sg_suffix): every tier is treated as a
+# potential origin, so LMCS scores the whole segmentation surface, not one assumed foothold.
+# Derived nodes (service / colocated) have no SG of their own, so they are targets only.
+nodes:
+  # Django app tier (EC2). A network node: both a source and a target.
+  app:
+    weight: 5
+    sg_suffix: "app-sg"
+    reachability: network
+
+  # RDS PostgreSQL — the crown-jewel data store.
+  rds:
+    weight: 10
+    sg_suffix: "db-sg"
+    reachability: network
+
+  # AWS Secrets Manager — DB creds + Django SECRET_KEY. A control-plane service reached
+  # over the public API (baseline all-egress) or an interface VPC endpoint (Zero Trust);
+  # 'service' checks the source can egress the given port to either path.
+  secrets:
+    weight: 10
+    reachability: service
+    port: 443
+
+  # Redis runs locally on the app instance, so it is reachable from any source that can
+  # reach the app host on the network (or from the app host itself).
+  redis:
+    weight: 3
+    reachability: colocated
+    host: app
+
+# NOTE (methodology): VPC interface endpoints and the ALB are deliberately NOT modelled as
+# weighted target assets. They are managed/infrastructure services, not crown jewels, and
+# the ALB is not an attacker-pivotable host. Including them would reward Zero Trust's own
+# controls as if they were lateral targets and invert the metric.

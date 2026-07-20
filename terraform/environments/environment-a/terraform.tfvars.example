@@ -1,0 +1,17 @@
+# Copy to terraform.tfvars and adjust. terraform.tfvars is git-ignored.
+aws_region  = "eu-west-2"
+name_prefix = "env-a"
+
+# Baseline is intentionally broad. Narrow admin_cidr to your IP if you prefer,
+# but the dissertation baseline models an over-exposed SME.
+admin_cidr = "0.0.0.0/0"
+
+# Set to an EXISTING EC2 key pair name to enable SSH in the baseline, or leave null.
+key_name = null
+
+instance_type     = "t3.micro"
+db_instance_class = "db.t3.micro"
+db_name           = "logitrack"
+db_username       = "logitrack"
+
+deploy_wazuh = true

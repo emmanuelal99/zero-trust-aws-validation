@@ -1,0 +1,50 @@
+# ==========================================
+# LOGITRACK EC2 PRODUCTION ARCHITECTURE
+# ==========================================
+
+services:
+  # 1. THE MESSAGE BROKER (REDIS)
+  redis:
+    image: redis:7-alpine
+    container_name: logitrack_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  # 2. THE WEB SERVER (DJANGO)
+  web:
+    image: 200810848227.dkr.ecr.eu-west-2.amazonaws.com/swe_devops:latest
+    container_name: logitrack_web
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - HOME=/tmp
+    ports:
+      - "80:8000"
+    command: gunicorn mylogistics.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 180
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      - redis
+
+  # 3. THE ASYNC WORKER (CELERY)
+  worker:
+    image: 200810848227.dkr.ecr.eu-west-2.amazonaws.com/swe_devops:latest
+    container_name: logitrack_celery_worker
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - HOME=/tmp
+    command: celery -A mylogistics worker --loglevel=info
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      - redis

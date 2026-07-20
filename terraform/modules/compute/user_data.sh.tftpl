@@ -1,0 +1,182 @@
+#!/bin/bash
+set -euo pipefail
+exec > >(tee /var/log/logitrack-bootstrap.log) 2>&1
+
+echo "[bootstrap] starting for ${name_prefix} (zero_trust=${zero_trust})"
+
+# ---------------------------------------------------------------------------
+# System packages.
+#   Django 6 requires Python 3.12 (AL2023 default python3 is 3.9).
+#   Redis on AL2023 is the 'redis6' package/unit.
+# ---------------------------------------------------------------------------
+dnf -y update
+dnf -y install python3.12 python3.12-pip postgresql15 jq redis6 unzip tar gzip
+
+# Local Redis broker/cache for Celery (identical on A and B by design).
+systemctl enable --now redis6
+
+# ---------------------------------------------------------------------------
+# Application + Django credentials.
+#   Zero Trust -> pull one JSON secret from Secrets Manager via the instance role.
+#   Baseline   -> injected as plaintext by Terraform (insecure, by design).
+# ---------------------------------------------------------------------------
+%{ if zero_trust ~}
+echo "[bootstrap] fetching app credentials from Secrets Manager"
+SECRET_JSON=$(aws secretsmanager get-secret-value --region ${aws_region} \
+  --secret-id ${db_secret_arn} --query SecretString --output text)
+DB_USER=$(jq -r '.username' <<<"$SECRET_JSON")
+DB_PASSWORD=$(jq -r '.password' <<<"$SECRET_JSON")
+DB_HOST=$(jq -r '.host' <<<"$SECRET_JSON")
+DB_NAME=$(jq -r '.dbname' <<<"$SECRET_JSON")
+DB_PORT=$(jq -r '.port' <<<"$SECRET_JSON")
+SECRET_KEY=$(jq -r '.secret_key' <<<"$SECRET_JSON")
+EMAIL_HOST_USER=$(jq -r '.email_host_user // ""' <<<"$SECRET_JSON")
+EMAIL_HOST_PASSWORD=$(jq -r '.email_host_password // ""' <<<"$SECRET_JSON")
+DEFAULT_FROM_EMAIL=$(jq -r '.default_from_email // ""' <<<"$SECRET_JSON")
+%{ else ~}
+DB_USER="${db_username}"
+DB_PASSWORD="${db_password}"
+DB_HOST="${db_host}"
+DB_NAME="${db_name}"
+DB_PORT="5432"
+SECRET_KEY="${secret_key}"
+EMAIL_HOST_USER="${email_host_user}"
+EMAIL_HOST_PASSWORD="${email_host_password}"
+DEFAULT_FROM_EMAIL="${default_from_email}"
+%{ endif ~}
+
+# Instance private IP (ALB health checks send Host: <target-ip>, so it must be
+# present in ALLOWED_HOSTS or Django returns 400 and the target is marked down).
+TOKEN=$(curl -sS -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+PRIVATE_IP=$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/local-ipv4)
+
+# ---------------------------------------------------------------------------
+# Application user + directories.
+# ---------------------------------------------------------------------------
+id logitrack >/dev/null 2>&1 || useradd --system --home-dir /opt/logitrack --shell /usr/sbin/nologin logitrack
+install -d -o logitrack -g logitrack /opt/logitrack
+install -d -m 0750 /etc/logitrack
+
+# ---------------------------------------------------------------------------
+# Fetch and unpack the app artifact from S3 (via the instance role).
+# ---------------------------------------------------------------------------
+echo "[bootstrap] downloading app artifact s3://${app_artifact_bucket}/${app_artifact_key}"
+aws s3 cp "s3://${app_artifact_bucket}/${app_artifact_key}" /tmp/logitrack-app.zip --region ${aws_region}
+rm -rf /opt/logitrack/app
+install -d /opt/logitrack/app
+unzip -o -q /tmp/logitrack-app.zip -d /opt/logitrack/app
+
+# ---------------------------------------------------------------------------
+# Application environment file. settings.py reads os.environ; systemd populates
+# it from here via EnvironmentFile. DEBUG=False selects the Postgres backend.
+# ---------------------------------------------------------------------------
+cat > /etc/logitrack/app.env <<EOF
+DEBUG=False
+SECRET_KEY=$${SECRET_KEY}
+ALLOWED_HOSTS=${alb_dns_name},$${PRIVATE_IP},localhost,127.0.0.1
+CSRF_TRUSTED_ORIGINS=http://${alb_dns_name}
+DB_NAME=$${DB_NAME}
+DB_USER=$${DB_USER}
+DB_PASSWORD=$${DB_PASSWORD}
+DB_HOST=$${DB_HOST}
+DB_PORT=$${DB_PORT}
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+EMAIL_HOST_USER=$${EMAIL_HOST_USER}
+EMAIL_HOST_PASSWORD=$${EMAIL_HOST_PASSWORD}
+DEFAULT_FROM_EMAIL=$${DEFAULT_FROM_EMAIL}
+DJANGO_SETTINGS_MODULE=mylogistics.settings
+EOF
+chmod 0640 /etc/logitrack/app.env
+chown root:logitrack /etc/logitrack/app.env
+
+# ---------------------------------------------------------------------------
+# Python virtualenv + dependencies.
+# ---------------------------------------------------------------------------
+python3.12 -m venv /opt/logitrack/venv
+/opt/logitrack/venv/bin/pip install --no-cache-dir --upgrade pip
+/opt/logitrack/venv/bin/pip install --no-cache-dir -r /opt/logitrack/app/requirements.txt
+
+# ---------------------------------------------------------------------------
+# collectstatic + migrate against RDS Postgres (run once at boot with app env).
+# ---------------------------------------------------------------------------
+set -a
+# shellcheck disable=SC1091
+source /etc/logitrack/app.env
+set +a
+cd /opt/logitrack/app
+/opt/logitrack/venv/bin/python manage.py collectstatic --noinput
+/opt/logitrack/venv/bin/python manage.py migrate --noinput
+
+chown -R logitrack:logitrack /opt/logitrack
+
+# ---------------------------------------------------------------------------
+# Wazuh agent enrolment (skipped when no manager IP is supplied).
+# ---------------------------------------------------------------------------
+%{ if wazuh_manager_ip != "" ~}
+echo "[bootstrap] installing Wazuh agent -> ${wazuh_manager_ip}"
+rpm --import https://packages.wazuh.com/key/GPG-KEY-WAZUH || true
+cat > /etc/yum.repos.d/wazuh.repo <<'REPO'
+[wazuh]
+gpgcheck=1
+gpgkey=https://packages.wazuh.com/key/GPG-KEY-WAZUH
+enabled=1
+name=EL-$releasever - Wazuh
+baseurl=https://packages.wazuh.com/4.x/yum/
+protect=1
+REPO
+WAZUH_MANAGER="${wazuh_manager_ip}" dnf -y install wazuh-agent || echo "[bootstrap] WARN wazuh-agent install failed"
+systemctl daemon-reload
+systemctl enable --now wazuh-agent || true
+%{ endif ~}
+
+# ---------------------------------------------------------------------------
+# systemd services: Gunicorn (web) + Celery (async worker).
+# virtual_scanner.py ships in /opt/logitrack/app but is NOT run as a service
+# (interactive CLI tool; run manually as needed).
+# ---------------------------------------------------------------------------
+cat > /etc/systemd/system/logitrack-web.service <<EOF
+[Unit]
+Description=Logi-Track Gunicorn (Django)
+After=network.target redis6.service
+Wants=redis6.service
+
+[Service]
+User=logitrack
+Group=logitrack
+WorkingDirectory=/opt/logitrack/app
+EnvironmentFile=/etc/logitrack/app.env
+ExecStart=/opt/logitrack/venv/bin/gunicorn mylogistics.wsgi:application --bind 0.0.0.0:${app_port} --workers 3 --timeout 180
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat > /etc/systemd/system/logitrack-worker.service <<EOF
+[Unit]
+Description=Logi-Track Celery worker
+After=network.target redis6.service
+Wants=redis6.service
+
+[Service]
+User=logitrack
+Group=logitrack
+WorkingDirectory=/opt/logitrack/app
+EnvironmentFile=/etc/logitrack/app.env
+ExecStart=/opt/logitrack/venv/bin/celery -A mylogistics worker --loglevel=info
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now logitrack-web.service
+systemctl enable --now logitrack-worker.service
+
+echo "[bootstrap] complete"

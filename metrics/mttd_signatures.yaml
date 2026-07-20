@@ -1,0 +1,44 @@
+# MTTD — signature map correlating attack actions to Wazuh alerts.
+#
+# Because the attacker (Nuclei/Stratus) and the detector (Wazuh) share no trace/correlation
+# ID, an action is matched to a detection by SIGNATURE: the Wazuh alert's rule id and/or
+# MITRE ATT&CK technique id. For each attack action (keyed by its `technique`), the earliest
+# Wazuh alert at or after t_execute whose rule_id ∈ rule_ids OR mitre_ids ∩ mitre_ids is the
+# detection. t_detect - t_execute is that action's detection delay.
+#
+# LIMITATION to document in the methodology: signature correlation can mis-attribute an
+# alert to the wrong action if two actions share a signature within a short window. This is
+# a small, acknowledged risk versus a shared trace ID.
+#
+# rule_ids are the custom Wazuh local rules authored in terraform/modules/wazuh/main.tf
+# (local_rules.xml, ids 100810-100814), each keyed on the CloudTrail data.aws.eventName and
+# tagged with the matching MITRE technique. An action matches on rule_id OR mitre_id, so the
+# metric still resolves if only one field is present in a given alert.
+# `technique` must match the `technique` field emitted in attack_actions.jsonl exactly
+# (Stratus: the attack id; Nuclei: use the form "nuclei:<template-id>").
+
+signatures:
+  - technique: "aws.defense-evasion.cloudtrail-stop"
+    rule_ids: ["100810"]     # Wazuh local rule: CloudTrail StopLogging
+    mitre_ids: ["T1562.008"]
+
+  - technique: "aws.defense-evasion.cloudtrail-delete"
+    rule_ids: ["100811"]     # Wazuh local rule: CloudTrail DeleteTrail
+    mitre_ids: ["T1562.008"]
+
+  - technique: "aws.persistence.iam-create-admin-user"
+    rule_ids: ["100812"]     # Wazuh local rule: IAM CreateUser
+    mitre_ids: ["T1136.003"]
+
+  - technique: "aws.credential-access.secretsmanager-batch-retrieve-secrets"
+    rule_ids: ["100813"]     # Wazuh local rule: BatchGetSecretValue
+    mitre_ids: ["T1552.007"]
+
+  - technique: "aws.exfiltration.ec2-security-group-open-port-22-ingress"
+    rule_ids: ["100814"]     # Wazuh local rule: AuthorizeSecurityGroupIngress
+    mitre_ids: ["T1562.007"]
+
+  # Example Nuclei-side entry (app-layer finding surfaced by a Wazuh web/log rule).
+  - technique: "nuclei:django-debug-detect"
+    rule_ids: []
+    mitre_ids: []

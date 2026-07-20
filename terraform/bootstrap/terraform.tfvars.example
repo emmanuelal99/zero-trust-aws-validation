@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars and set a globally-unique bucket name.
+aws_region        = "eu-west-2"
+state_bucket_name = "zt-dissertation-tfstate-CHANGEME"
+lock_table_name   = "zt-dissertation-tf-locks"
+
+# GitHub Actions OIDC for the pipeline. Leave off until the repo exists, then set
+# both and re-apply; use the pipeline_role_arn output as the AWS_PIPELINE_ROLE_ARN secret.
+create_pipeline_oidc = false
+github_repo          = "your-org/your-repo"

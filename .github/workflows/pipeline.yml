@@ -1,0 +1,584 @@
+name: attack-pipeline
+
+# Five-stage automated pentest pipeline against a target environment (A or B), plus the
+# Prowler-driven CBCS baseline and the drift-injection CDI measurement.
+#
+#   1. terraform  -> fmt / validate / plan (gated apply)
+#   2. trivy      -> IaC vulnerability scan
+#   3. prowler    -> CIS AWS Foundations posture assessment -> CBCS_baseline
+#   4. nuclei     -> web/app scan; also applies/reverts D7 app-layer drift (Nuclei channel)
+#   5. stratus    -> Stratus Red Team cloud adversary emulation
+#   6. cdi        -> inject D1–D6 (prowler_cbcs channel) -> Prowler re-scan -> CBCS_current
+#                    -> CDI = 1-(current/baseline) -> revert
+#   +. tf-drift   -> inject D8 (terraform_plan channel) -> terraform plan drift -> revert
+#
+# Drift scenarios (Table 3.3) live in drift/drift_scenarios.yaml and are split by detection
+# channel so D7 (Nuclei) and D8 (terraform plan) NEVER touch the CBCS/CDI calculation.
+# Every drift injection has a matching revert step guarded by `if: always()`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [environment-a, environment-b]
+        default: environment-b
+      apply:
+        description: Run terraform apply (otherwise plan only)
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write        # OIDC federation to AWS
+  contents: read
+  security-events: write # upload Trivy SARIF
+
+concurrency:
+  group: attack-pipeline-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: eu-west-2
+  TARGET_ENV: ${{ github.event.inputs.environment || 'environment-b' }}
+  CIS_COMPLIANCE: cis_3.0_aws_foundations
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Terraform
+  # ---------------------------------------------------------------------------
+  terraform:
+    runs-on: ubuntu-latest
+    outputs:
+      app_url: ${{ steps.out.outputs.app_url }}
+      name_prefix: ${{ steps.out.outputs.name_prefix }}
+    defaults:
+      run:
+        working-directory: terraform/environments/${{ github.event.inputs.environment || 'environment-b' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PIPELINE_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - run: terraform init
+      - run: terraform fmt -check -recursive ../../
+      - run: terraform validate
+      - run: terraform plan -out=tfplan
+      - name: Apply (gated)
+        if: ${{ github.event.inputs.apply == 'true' }}
+        run: terraform apply -auto-approve tfplan
+      - name: Export outputs
+        id: out
+        run: |
+          echo "name_prefix=${TARGET_ENV/environment-/env-}" >> "$GITHUB_OUTPUT"
+          if terraform output -raw app_url >/dev/null 2>&1; then
+            echo "app_url=$(terraform output -raw app_url)" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Trivy (IaC scan)
+  # ---------------------------------------------------------------------------
+  trivy:
+    runs-on: ubuntu-latest
+    needs: terraform
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy IaC scan
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: config
+          scan-ref: terraform/
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: '0'
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trivy-results
+          path: trivy-results.sarif
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Prowler  ->  CBCS baseline
+  # ---------------------------------------------------------------------------
+  prowler:
+    runs-on: ubuntu-latest
+    needs: terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PIPELINE_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Install Prowler
+        run: pip install prowler
+      - name: Run Prowler (CIS AWS Foundations)
+        run: |
+          prowler aws \
+            --compliance "$CIS_COMPLIANCE" \
+            --region "$AWS_REGION" \
+            --output-formats csv json-ocsf \
+            --output-directory prowler-output || true
+      - name: Compute CBCS (baseline)
+        run: |
+          pip install -r metrics/requirements.txt
+          CSV=$(ls prowler-output/compliance/*"${CIS_COMPLIANCE}"*.csv | head -n1)
+          python metrics/compute_metrics.py cbcs \
+            --input "$CSV" \
+            --output "metrics/data/cbcs_baseline_${TARGET_ENV}.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cbcs-baseline-${{ env.TARGET_ENV }}
+          path: metrics/data/cbcs_baseline_${{ env.TARGET_ENV }}.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prowler-output-baseline-${{ env.TARGET_ENV }}
+          path: prowler-output/
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 — Nuclei (web/app scan)
+  # ---------------------------------------------------------------------------
+  nuclei:
+    runs-on: ubuntu-latest
+    needs: terraform
+    if: ${{ needs.terraform.outputs.app_url != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PIPELINE_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Inject app-layer drift — Nuclei channel (D7)
+        env:
+          ENV_LETTER: ${{ env.TARGET_ENV == 'environment-a' && 'A' || 'B' }}
+        run: |
+          pip install -r metrics/requirements.txt
+          echo "NAME_PREFIX=${TARGET_ENV/environment-/env-}" >> "$GITHUB_ENV"
+          NAME_PREFIX="${TARGET_ENV/environment-/env-}" \
+            python drift/run_drift.py --apply --env "$ENV_LETTER" \
+              --channel nuclei --continue-on-error
+      - name: Install Nuclei
+        # Install the binary directly (not projectdiscovery/nuclei-action) so we can capture
+        # the "Templates loaded for current scan: N" count — the true ASR denominator.
+        uses: projectdiscovery/nuclei-action@v3
+        with:
+          install-only: true
+      - name: Run Nuclei
+        run: |
+          # -stats prints the loaded-template count to stderr; tee it so we can grep N out.
+          nuclei -target "${{ needs.terraform.outputs.app_url }}" \
+            -jsonl -o nuclei-results.jsonl -stats 2> nuclei-run.log || true
+          # `|| true` so a missing stats line (grep exit 1) doesn't trip `set -eo pipefail`.
+          N=$(grep -oiE 'Templates loaded for current scan: [0-9]+' nuclei-run.log \
+                | grep -oE '[0-9]+' | tail -n1 || true)
+          echo "NUCLEI_TEMPLATES_RUN=${N:-0}" >> "$GITHUB_ENV"
+          echo "${N:-0}" > nuclei-templates-run.txt
+      - name: Build attack actions (Nuclei channel)
+        if: always()
+        run: |
+          # One action per confirmed finding: technique = "nuclei:<template-id>",
+          # t_execute from the finding timestamp (MTTD input).
+          : > attack_actions.jsonl
+          # if/then (not `&&`) so an absent findings file — the no-hits case — doesn't
+          # exit non-zero under `set -eo pipefail` and fail the job.
+          if [ -f nuclei-results.jsonl ]; then
+            python - <<'PY'
+          import json, pathlib
+          out = pathlib.Path("attack_actions.jsonl").open("w")
+          for line in pathlib.Path("nuclei-results.jsonl").read_text().splitlines():
+              line = line.strip()
+              if not line:
+                  continue
+              try:
+                  r = json.loads(line)
+              except json.JSONDecodeError:
+                  continue
+              tid = r.get("template-id") or r.get("templateID") or "unknown"
+              ts = r.get("timestamp") or ""
+              out.write(json.dumps({
+                  "action_id": f"nuclei-{tid}",
+                  "tool": "nuclei",
+                  "technique": f"nuclei:{tid}",
+                  "t_execute": ts,
+              }) + "\n")
+          out.close()
+          PY
+          fi
+      - name: Revert app-layer drift (always)
+        if: always()
+        env:
+          ENV_LETTER: ${{ env.TARGET_ENV == 'environment-a' && 'A' || 'B' }}
+        run: |
+          NAME_PREFIX="${TARGET_ENV/environment-/env-}" \
+            python drift/run_drift.py --revert --env "$ENV_LETTER" \
+              --channel nuclei --continue-on-error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nuclei-results-${{ env.TARGET_ENV }}
+          path: |
+            nuclei-results.jsonl
+            nuclei-templates-run.txt
+            attack_actions.jsonl
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 — Stratus Red Team (cloud adversary emulation)
+  # ---------------------------------------------------------------------------
+  stratus:
+    runs-on: ubuntu-latest
+    needs: terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PIPELINE_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Install Stratus Red Team
+        run: |
+          curl -sL https://github.com/DataDog/stratus-red-team/releases/latest/download/stratus-red-team_Linux_x86_64.tar.gz \
+            | tar xz -C /usr/local/bin stratus
+      - name: Run selected techniques
+        run: |
+          # Technique selection lives in security/stratus-red-team/; detonate + cleanup.
+          # Emit two metric artefacts:
+          #   stratus_results.jsonl  — one record per technique (ASR denominator/numerator).
+          #   attack_actions.jsonl   — one action per detonation with t_execute (MTTD input).
+          : > stratus_results.jsonl
+          : > attack_actions.jsonl
+          if [ -f security/stratus-red-team/techniques.txt ]; then
+            while read -r t; do
+              [ -z "$t" ] && continue
+              case "$t" in \#*) continue ;; esac
+              TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              printf '{"action_id":"stratus-%s","tool":"stratus","technique":"%s","t_execute":"%s"}\n' \
+                "$t" "$t" "$TS" >> attack_actions.jsonl
+              if stratus detonate "$t"; then
+                CODE=0; STATUS="success"
+              else
+                CODE=$?; STATUS="failed"
+              fi
+              printf '{"technique":"%s","status":"%s","exit_code":%s,"timestamp":"%s"}\n' \
+                "$t" "$STATUS" "$CODE" "$TS" >> stratus_results.jsonl
+            done < security/stratus-red-team/techniques.txt
+            stratus cleanup --all || true
+          else
+            echo "No techniques.txt — skipping detonation."
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stratus-results-${{ env.TARGET_ENV }}
+          path: |
+            stratus_results.jsonl
+            attack_actions.jsonl
+
+  # ---------------------------------------------------------------------------
+  # Stage 6 — CDI: drift injection (Table 3.3) -> Prowler re-scan -> CBCS current -> CDI
+  # ---------------------------------------------------------------------------
+  cdi:
+    runs-on: ubuntu-latest
+    needs: prowler
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PIPELINE_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: cbcs-baseline-${{ env.TARGET_ENV }}
+          path: metrics/data
+      - name: Resolve deployed resource IDs
+        id: ids
+        run: |
+          NP="${TARGET_ENV/environment-/env-}"
+          filt() { aws ec2 describe-security-groups --region "$AWS_REGION" \
+            --filters "Name=group-name,Values=$1" --query 'SecurityGroups[0].GroupId' --output text; }
+          {
+            echo "NAME_PREFIX=$NP"
+            echo "ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)"
+            echo "APP_SG_ID=$(filt "$NP-app-sg")"
+            echo "DB_SG_ID=$(filt "$NP-db-sg")"
+            echo "ALB_SG_ID=$(filt "$NP-alb-sg")"
+            echo "DB_INSTANCE_ID=$NP-db"
+            echo "INSTANCE_ROLE_NAME=$NP-instance-role"
+            echo "VPC_ID=$(aws ec2 describe-vpcs --region "$AWS_REGION" \
+              --filters "Name=tag:Name,Values=$NP-vpc" --query 'Vpcs[0].VpcId' --output text)"
+            echo "CLOUDTRAIL_NAME=$(aws cloudtrail describe-trails --region "$AWS_REGION" \
+              --query 'trailList[0].Name' --output text | sed 's/^None$//')"
+          } >> "$GITHUB_ENV"
+      - name: Inject drift — CBCS channel only (D1–D6)
+        env:
+          ENV_LETTER: ${{ env.TARGET_ENV == 'environment-a' && 'A' || 'B' }}
+        run: |
+          pip install -r metrics/requirements.txt
+          # --channel prowler_cbcs excludes D7 (Nuclei) and D8 (terraform plan) so they
+          # never perturb the CBCS/CDI measurement.
+          python drift/run_drift.py --apply --env "$ENV_LETTER" \
+            --channel prowler_cbcs --continue-on-error
+      - name: Re-run Prowler (post-drift)
+        run: |
+          pip install prowler
+          prowler aws \
+            --compliance "$CIS_COMPLIANCE" \
+            --region "$AWS_REGION" \
+            --output-formats csv \
+            --output-directory prowler-output-current || true
+      - name: Compute CBCS (current) and CDI
+        run: |
+          CSV=$(ls prowler-output-current/compliance/*"${CIS_COMPLIANCE}"*.csv | head -n1)
+          python metrics/compute_metrics.py cbcs \
+            --input "$CSV" \
+            --output "metrics/data/cbcs_current_${TARGET_ENV}.json"
+          python metrics/compute_metrics.py cdi \
+            --baseline "metrics/data/cbcs_baseline_${TARGET_ENV}.json" \
+            --current  "metrics/data/cbcs_current_${TARGET_ENV}.json" \
+            --output   "metrics/data/cdi_${TARGET_ENV}.json"
+      - name: Revert drift (always)
+        if: always()
+        env:
+          ENV_LETTER: ${{ env.TARGET_ENV == 'environment-a' && 'A' || 'B' }}
+        run: |
+          pip install -r metrics/requirements.txt || true
+          python drift/run_drift.py --revert --env "$ENV_LETTER" \
+            --channel prowler_cbcs --continue-on-error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cdi-${{ env.TARGET_ENV }}
+          path: |
+            metrics/data/cbcs_current_${{ env.TARGET_ENV }}.json
+            metrics/data/cdi_${{ env.TARGET_ENV }}.json
+
+  # ---------------------------------------------------------------------------
+  # Infrastructure drift (D8) — detected by `terraform plan`, NOT Prowler/CBCS.
+  # Runs independently of the CDI job so it never perturbs the CBCS measurement.
+  # ---------------------------------------------------------------------------
+  tf-drift:
+    runs-on: ubuntu-latest
+    needs: terraform
+    defaults:
+      run:
+        working-directory: terraform/environments/${{ github.event.inputs.environment || 'environment-b' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PIPELINE_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - run: terraform init
+      - name: Resolve VPC ID
+        run: |
+          NP="${TARGET_ENV/environment-/env-}"
+          echo "NAME_PREFIX=$NP" >> "$GITHUB_ENV"
+          echo "VPC_ID=$(aws ec2 describe-vpcs --region "$AWS_REGION" \
+            --filters "Name=tag:Name,Values=$NP-vpc" --query 'Vpcs[0].VpcId' --output text)" >> "$GITHUB_ENV"
+      - name: Inject infra drift (D8)
+        env:
+          ENV_LETTER: ${{ env.TARGET_ENV == 'environment-a' && 'A' || 'B' }}
+        run: |
+          pip install -r ../../../metrics/requirements.txt
+          python ../../../drift/run_drift.py --apply --env "$ENV_LETTER" \
+            --channel terraform_plan --continue-on-error
+      - name: Detect drift via terraform plan
+        id: plan
+        run: |
+          # -detailed-exitcode: 0 = no drift, 2 = drift detected (expected after D8), 1 = error.
+          set +e
+          terraform plan -detailed-exitcode -no-color
+          echo "exitcode=$?" >> "$GITHUB_OUTPUT"
+      - name: Report drift result
+        run: |
+          case "${{ steps.plan.outputs.exitcode }}" in
+            2) echo "Infrastructure drift DETECTED (terraform plan exit 2) — expected for D8." ;;
+            0) echo "No drift detected — D8 did not register (check tag management)." ;;
+            *) echo "terraform plan errored." ; exit 1 ;;
+          esac
+      - name: Revert infra drift (always)
+        if: always()
+        env:
+          ENV_LETTER: ${{ env.TARGET_ENV == 'environment-a' && 'A' || 'B' }}
+        run: |
+          pip install -r ../../../metrics/requirements.txt || true
+          python ../../../drift/run_drift.py --revert --env "$ENV_LETTER" \
+            --channel terraform_plan --continue-on-error
+
+  # ---------------------------------------------------------------------------
+  # Wazuh alert export — pull alerts.json off the manager (private subnet) via SSM.
+  # Runs after the attack stages so the alerts window covers the detonations.
+  # ---------------------------------------------------------------------------
+  wazuh-export:
+    runs-on: ubuntu-latest
+    needs: [nuclei, stratus]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PIPELINE_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      # Pull the attack-action logs so the alert window can be anchored to THIS run's
+      # earliest detonation (batching-proof) rather than a fixed now-minus-N.
+      - uses: actions/download-artifact@v4
+        with:
+          name: nuclei-results-${{ env.TARGET_ENV }}
+          path: nuclei
+      - uses: actions/download-artifact@v4
+        with:
+          name: stratus-results-${{ env.TARGET_ENV }}
+          path: stratus
+      - name: Export alerts.json from Wazuh manager
+        run: |
+          # The manager sits in a private subnet (SSM-only). We DON'T stage via S3 because
+          # Env B's Zero Trust instance role has no s3:PutObject — adding it would weaken the
+          # very posture LMCS/CBCS measure. Instead we filter alerts to THIS run's time window
+          # on the host, gzip+base64, and pull it back through the SSM command output.
+          #
+          # Why the window filter: get-command-invocation's StandardOutputContent is capped
+          # (~24000 chars). A Wazuh manager reused across a 30-run batch accumulates alerts.json
+          # unbounded, so pulling the whole file would eventually exceed the cap and TRUNCATE
+          # silently (gunzip then yields an empty alerts.json — a false "0 detections"). Keeping
+          # only alerts since CUTOFF makes the payload proportional to one run, not the manager
+          # lifetime — and CUTOFF is anchored to THIS run's earliest attack action (min t_execute
+          # minus a 5-min margin), so batching runs together on a persistent manager can't widen
+          # the window. Falls back to now-6h only if no attack actions were recorded. The manager
+          # clock is pinned to UTC (Wazuh module user_data) and t_execute is emitted UTC, so a
+          # lexical `>=` of the alert "timestamp" against the ISO cutoff is chronologically
+          # correct and needs only awk on the host. Still zero IAM change: no S3, no PutObject.
+          : > alerts.json
+          NP="${TARGET_ENV/environment-/env-}"
+          EARLIEST=$(cat nuclei/attack_actions.jsonl stratus/attack_actions.jsonl 2>/dev/null \
+            | grep -oE '"t_execute":"[^"]+"' | sed 's/.*:"//; s/"$//' | sort | head -n1)
+          if [ -n "$EARLIEST" ]; then
+            CUTOFF=$(date -u -d "$EARLIEST -5 minutes" +%Y-%m-%dT%H:%M:%S 2>/dev/null \
+              || echo "${EARLIEST%Z}")
+          else
+            CUTOFF=$(date -u -d '-6 hours' +%Y-%m-%dT%H:%M:%S)
+          fi
+          IID=$(aws ec2 describe-instances --region "$AWS_REGION" \
+            --filters "Name=tag:Name,Values=$NP-wazuh" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[0].Instances[0].InstanceId' --output text 2>/dev/null || echo None)
+          if [ "$IID" = "None" ] || [ -z "$IID" ]; then
+            echo "No running Wazuh manager ($NP-wazuh) — deploy_wazuh likely false. Empty alerts.json."
+            exit 0
+          fi
+          # Remote command: keep alert lines whose "timestamp" value >= CUTOFF, then gzip|base64.
+          # substr offsets: `"timestamp":"` is 13 chars; RLENGTH-14 strips it + the closing quote.
+          # \$0 stays literal (awk field) rather than expanding as a shell arg; jq -n does the
+          # JSON escaping so the awk single-quotes/braces survive intact into --parameters.
+          REMOTE="awk -v c=\"$CUTOFF\" '{ if (match(\$0, /\"timestamp\":\"[^\"]+\"/)) { s=substr(\$0, RSTART+13, RLENGTH-14); if (s >= c) print } }' /var/ossec/logs/alerts/alerts.json 2>/dev/null | gzip -c | base64 -w0 || true"
+          PARAMS=$(jq -n --arg c "$REMOTE" '{commands: [$c]}')
+          CMD=$(aws ssm send-command --region "$AWS_REGION" \
+            --instance-ids "$IID" \
+            --document-name AWS-RunShellScript \
+            --parameters "$PARAMS" \
+            --query 'Command.CommandId' --output text)
+          aws ssm wait command-executed --region "$AWS_REGION" \
+            --command-id "$CMD" --instance-id "$IID" || true
+          aws ssm get-command-invocation --region "$AWS_REGION" \
+            --command-id "$CMD" --instance-id "$IID" \
+            --query 'StandardOutputContent' --output text \
+            | tr -d '\n' | base64 -d 2>/dev/null | gunzip 2>/dev/null > alerts.json || true
+          echo "alerts.json lines (since $CUTOFF): $(wc -l < alerts.json)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wazuh-alerts-${{ env.TARGET_ENV }}
+          path: alerts.json
+
+  # ---------------------------------------------------------------------------
+  # ASR — Attack Success Rate (offensive: Nuclei + Stratus).
+  # ---------------------------------------------------------------------------
+  asr:
+    runs-on: ubuntu-latest
+    needs: [nuclei, stratus]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: nuclei-results-${{ env.TARGET_ENV }}
+          path: nuclei
+      - uses: actions/download-artifact@v4
+        with:
+          name: stratus-results-${{ env.TARGET_ENV }}
+          path: stratus
+      - name: Compute ASR
+        run: |
+          pip install -r metrics/requirements.txt
+          mkdir -p metrics/data
+          N=$(cat nuclei/nuclei-templates-run.txt 2>/dev/null || echo 0)
+          python metrics/compute_metrics.py asr \
+            --nuclei nuclei/nuclei-results.jsonl \
+            --nuclei-templates-run "${N:-0}" \
+            --stratus stratus/stratus_results.jsonl \
+            --output "metrics/data/asr_${TARGET_ENV}.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: asr-${{ env.TARGET_ENV }}
+          path: metrics/data/asr_${{ env.TARGET_ENV }}.json
+
+  # ---------------------------------------------------------------------------
+  # MTTD — Mean Time To Detect (attack actions vs Wazuh alerts, by signature).
+  # ---------------------------------------------------------------------------
+  mttd:
+    runs-on: ubuntu-latest
+    needs: [nuclei, stratus, wazuh-export]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: nuclei-results-${{ env.TARGET_ENV }}
+          path: nuclei
+      - uses: actions/download-artifact@v4
+        with:
+          name: stratus-results-${{ env.TARGET_ENV }}
+          path: stratus
+      - uses: actions/download-artifact@v4
+        with:
+          name: wazuh-alerts-${{ env.TARGET_ENV }}
+          path: wazuh
+      - name: Merge attack actions and compute MTTD
+        run: |
+          pip install -r metrics/requirements.txt
+          mkdir -p metrics/data
+          # Both attack stages emit attack_actions.jsonl on their own runner; concatenate.
+          cat nuclei/attack_actions.jsonl stratus/attack_actions.jsonl \
+            > attack_actions.jsonl 2>/dev/null || true
+          python metrics/compute_metrics.py mttd \
+            --actions attack_actions.jsonl \
+            --alerts wazuh/alerts.json \
+            --signatures metrics/mttd_signatures.yaml \
+            --output "metrics/data/mttd_${TARGET_ENV}.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mttd-${{ env.TARGET_ENV }}
+          path: metrics/data/mttd_${{ env.TARGET_ENV }}.json

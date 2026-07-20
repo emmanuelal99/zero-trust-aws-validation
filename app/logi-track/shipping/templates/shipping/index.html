@@ -1,0 +1,346 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LogiTrack — Global Logistics & Real-Time Tracking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'style.css' %}">
+
+</head>
+<body>
+
+  <!-- PAGE LOADER -->
+  <div id="page-loader">
+    <div class="loader-logo">Logi<span>Track</span></div>
+    <div class="loader-bar-track"><div class="loader-bar-fill"></div></div>
+    <div class="loader-text">Initialising…</div>
+  </div>
+
+  <!-- PAGE TRANSITION OVERLAY -->
+  <div id="page-transition"></div>
+
+  <!-- CUSTOM CURSOR -->
+  <div class="cursor-dot"></div>
+  <div class="cursor-ring"></div>
+
+  <!-- SCROLL PROGRESS -->
+  <div id="scroll-progress"></div>
+
+  <!-- TOAST CONTAINER -->
+  <div id="toast-container"></div>
+
+ 
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <div class="logo">
+      <div class="logo-icon">LG</div>
+      Logi<span>Track</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="{% url 'homepage' %}" class="active">Home</a></li>
+      <li><a href="{% url 'about_page' %}">About</a></li>
+      <li><a href="{% url 'service_page' %}">Services</a></li>
+      <li><a href="{% url 'contact_page' %}">Contact</a></li>
+      <li><a href="{% url 'homepage' %}" class="nav-cta">Track Your Package</a></li>
+    </ul>
+    <div class="hamburger">
+      <span></span><span></span><span></span>
+    </div>
+  </nav>
+
+  <!-- ERROR TOAST NOTIFICATION -->
+   {% if messages %}
+<div id="error-toast" style="position: fixed; top: 100px; right: 20px; z-index: 10001; animation: slideIn 0.5s ease-out;">
+    {% for message in messages %}
+    <div style="background: #ff4444; color: white; padding: 16px 24px; border-radius: 12px; display: flex; align-items: center; gap: 15px; box-shadow: 0 10px 30px rgba(255, 68, 68, 0.4); font-family: 'DM Sans', sans-serif;">
+        <div style="font-size: 24px;">⚠️</div>
+        <div>
+            <div style="font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Tracking Error</div>
+            <div style="opacity: 0.9; font-size: 15px;">{{ message }}</div>
+        </div>
+        <button onclick="this.parentElement.remove()" style="background: none; border: none; color: white; cursor: pointer; font-size: 20px; margin-left: 10px;">&times;</button>
+    </div>
+    {% endfor %}
+</div>
+
+<style>
+    @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+</style>
+{% endif %}
+
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-bg"></div>
+  <div id="hero-particles"></div>
+  <div class="hero-shapes"></div>
+    <div class="hero-content">
+      <div class="hero-badge">
+        <span></span> 
+      </div>
+      <h1>Deliver<br>the <em>World</em><br><span class="typewriter-wrap"><span class="typewriter-text">ON TIME.</span><span class="typewriter-cursor"></span></span></h1>
+      <p>LogiTrack connects businesses to a global network of carriers with real-time shipment visibility, guaranteed reliability, and end-to-end logistics solutions.</p>
+
+      <!-- TRACKING WIDGET -->
+      <div class="tracking-widget">
+        <h3>Track Your <span>Shipment</span></h3>
+        <form method="POST" action="{% url 'homepage' %}">
+          {% csrf_token %}
+          <div class="track-input-row">
+            <input type="text" name="tracking_number" id="trackingInput" placeholder="Enter tracking number e.g. D1234567890" required />
+            <button type="submit" class="track-btn">&#128269; Track</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+
+  
+  <!-- TICKER TAPE -->
+  <div class="ticker-wrap">
+    <div class="ticker-track">
+      <span class="ticker-item"><span class="ticker-dot"></span>International Express — 80+ Countries</span>
+      <span class="ticker-item"><span class="ticker-dot"></span>Ocean Freight — FCL &amp; LCL Solutions</span>
+      <span class="ticker-item"><span class="ticker-dot"></span>Road Freight — Pan-European Network</span>
+      <span class="ticker-item"><span class="ticker-dot"></span>Warehousing &amp; Fulfillment — 50+ Hubs</span>
+      <span class="ticker-item"><span class="ticker-dot"></span>Customs Clearance — AEO Certified</span>
+      <span class="ticker-item"><span class="ticker-dot"></span>99.8% On-Time Delivery Rate</span>
+      <!-- duplicate for seamless loop -->
+      <span class="ticker-item"><span class="ticker-dot"></span>International Express — 80+ Countries</span>
+      <span class="ticker-item"><span class="ticker-dot"></span>Ocean Freight — FCL &amp; LCL Solutions</span>
+      <span class="ticker-item"><span class="ticker-dot"></span>Road Freight — Pan-European Network</span>
+      <span class="ticker-item"><span class="ticker-dot"></span>Warehousing &amp; Fulfillment — 50+ Hubs</span>
+      <span class="ticker-item"><span class="ticker-dot"></span>Customs Clearance — AEO Certified</span>
+      <span class="ticker-item"><span class="ticker-dot"></span>99.8% On-Time Delivery Rate</span>
+    </div>
+  </div>
+
+  <!-- LIVE CLOCK BAR -->
+  <div class="live-clock-bar">
+    <span class="live-badge">Live</span>
+    <span class="clock-zone"><span class="clock-flag">🇬🇧</span> LON <strong id="clock-lon">--:--:--</strong></span>
+    <span class="clock-zone"><span class="clock-flag">🇩🇪</span> FRA <strong id="clock-fra">--:--:--</strong></span>
+    <span class="clock-zone"><span class="clock-flag">🇦🇪</span> DXB <strong id="clock-dxb">--:--:--</strong></span>
+    <span class="clock-zone"><span class="clock-flag">🇸🇬</span> SGP <strong id="clock-sgp">--:--:--</strong></span>
+    <span class="clock-zone"><span class="clock-flag">🇺🇸</span> NYC <strong id="clock-nyc">--:--:--</strong></span>
+  </div>
+
+  <!-- STATS BAR -->
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="stat-num" data-target="80" data-suffix="+">0+</div>
+      <div class="stat-label">Countries Served</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" data-target="1000" data-suffix="+">0+</div>
+      <div class="stat-label">Deliveries / Year</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" data-target="99" data-suffix=".8%">0%</div>
+      <div class="stat-label">On-Time Rate</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" data-target="24" data-suffix="/7">0</div>
+      <div class="stat-label">Customer Support</div>
+    </div>
+  </div>
+
+  <!-- SERVICES PREVIEW -->
+  <div style="background: white; padding: 0 0 0 0;">
+    <div class="section">
+      <p class="section-tag reveal">What We Offer</p>
+      <h2 class="section-title reveal">Logistics <em>Solutions</em><br>Built for Scale</h2>
+      <p class="section-sub reveal">From next-day domestic parcels to complex international freight, we have a service to match every shipment.</p>
+
+      <div class="services-grid">
+        <div class="service-card reveal">
+          <div class="service-icon">✈️</div>
+          <h3>International Express</h3>
+          <p>Door-to-door express delivery to 80+ countries and territories. Guaranteed next-business-day options available.</p>
+          <a href="{% url 'service_page' %}" class="service-link">Learn more →</a>
+        </div>
+        <div class="service-card reveal">
+          <div class="service-icon">🚢</div>
+          <h3>Ocean Freight</h3>
+          <p>Full container load (FCL) and less-than-container (LCL) ocean shipping solutions for any cargo size.</p>
+          <a href="{% url 'service_page' %}" class="service-link">Learn more →</a>
+        </div>
+        <div class="service-card reveal">
+          <div class="service-icon">🚚</div>
+          <h3>Road Freight</h3>
+          <p>Comprehensive European and domestic road transport with real-time GPS tracking and temperature control.</p>
+          <a href="{% url 'service_page' %}" class="service-link">Learn more →</a>
+        </div>
+        <div class="service-card reveal">
+          <div class="service-icon">📦</div>
+          <h3>Warehousing & Fulfillment</h3>
+          <p>Strategic storage facilities with pick-and-pack, inventory management and same-day dispatch capabilities.</p>
+          <a href="{% url 'service_page' %}" class="service-link">Learn more →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WHY US -->
+  <div class="why-section">
+    <div class="why-inner">
+      <div class="why-visual reveal">
+        <img src="https://images.unsplash.com/photo-1553413077-190dd305871c?w=800&q=80" alt="Logistics warehouse" />
+        <div class="why-visual-badge">
+          <strong>2</strong>
+          <span>Years Experience</span>
+        </div>
+      </div>
+      <div class="why-content reveal">
+        <p class="section-tag" style="color: rgba(255,204,0,0.8);">Why LogiTrack</p>
+        <h2 class="section-title">The Trusted<br><em style="color:var(--yellow)">Standard</em> in<br>Logistics</h2>
+        <p class="section-sub">We don't just move packages — we deliver certainty. Our technology-first approach gives you full visibility and control at every step.</p>
+        <div class="why-list">
+          <div class="why-item">
+            <div class="why-check">✓</div>
+            <div>
+              <h4>Real-Time GPS Tracking</h4>
+              <p>Live shipment location updates every 15 minutes, accessible via web and mobile app.</p>
+            </div>
+          </div>
+          <div class="why-item">
+            <div class="why-check">✓</div>
+            <div>
+              <h4>Proactive Delay Alerts</h4>
+              <p>Automatic SMS & email notifications if any issue is detected — before you need to ask.</p>
+            </div>
+          </div>
+          <div class="why-item">
+            <div class="why-check">✓</div>
+            <div>
+              <h4>Customs Clearance Included</h4>
+              <p>Our expert team handles all import/export documentation and clearance procedures.</p>
+            </div>
+          </div>
+          <div class="why-item">
+            <div class="why-check">✓</div>
+            <div>
+              <h4>Dedicated Account Manager</h4>
+              <p>A single point of contact for all your logistics needs, available around the clock.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TESTIMONIALS -->
+  <div class="testimonials-section">
+    <div class="section">
+      <p class="section-tag reveal">Customer Stories</p>
+      <h2 class="section-title reveal">Trusted by <em>Thousands</em><br>of Businesses</h2>
+
+      <div class="testimonials-grid">
+        <div class="testimonial-card reveal">
+          <div class="stars">★★★★★</div>
+          <p>LogiTrack transformed our supply chain. We went from dreading import delays to confidently promising our customers 5-day delivery from factory to door.</p>
+          <div class="tc-author">
+            <div class="tc-avatar">EA</div>
+            <div>
+              <div class="tc-name">EA</div>
+              <div class="tc-title">Supply Chain Director, TechCo UK</div>
+            </div>
+          </div>
+        </div>
+        <div class="testimonial-card reveal">
+          <div class="stars">★★★★★</div>
+          <p>The real-time tracking dashboard is exceptional. We can see exactly where every shipment is, share updates with clients, and resolve issues before they escalate.</p>
+          <div class="tc-author">
+            <div class="tc-avatar">EA</div>
+            <div>
+              <div class="tc-name">EA</div>
+              <div class="tc-title">Operations Lead, Nordic E-Commerce</div>
+            </div>
+          </div>
+        </div>
+        <div class="testimonial-card reveal">
+          <div class="stars">★★★★★</div>
+          <p>Switching to LogiTrack reduced our shipping costs by 18% while improving delivery times. Their team genuinely understand logistics at a global scale.</p>
+          <div class="tc-author">
+            <div class="tc-avatar">EA</div>
+            <div>
+              <div class="tc-name">EA</div>
+              <div class="tc-title">CEO, AfriMarket Retail</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA BAND -->
+  <div class="cta-band">
+    <h2>Ready to Ship<br>Smarter?</h2>
+    <p>Join 1,000+ businesses who trust LogiTrack with their global logistics.</p>
+    <div class="cta-btns">
+      <a href="{% url 'contact_page' %}" class="btn btn-white">Get a Free Quote →</a>
+      <a href="{% url 'service_page' %}" class="btn btn-outline">Explore Services</a>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="logo" style="margin-bottom: 0;">
+          <div class="logo-icon">LG</div>
+          Logi<span>Track</span>
+        </div>
+        <p>Global logistics partner for businesses of all sizes. Delivering certainty from origin to destination since 2026.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Services</h4>
+        <ul>
+          <li><a href="{% url 'service_page' %}">International Express</a></li>
+          <li><a href="{% url 'service_page' %}">Ocean Freight</a></li>
+          <li><a href="{% url 'service_page' %}">Road Freight</a></li>
+          <li><a href="{% url 'service_page' %}">Warehousing</a></li>
+          <li><a href="{% url 'service_page' %}">Customs Clearance</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="{% url 'about_page' %}">About Us</a></li>
+          <li><a href="{% url 'about_page' %}">Our Team</a></li>
+          <li><a href="#">Careers</a></li>
+          <li><a href="#">Newsroom</a></li>
+          <li><a href="{% url 'contact_page' %}">Contact</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <ul>
+          <li><a href="#">Track a Shipment</a></li>
+          <li><a href="#">Help Center</a></li>
+          <li><a href="#">API Docs</a></li>
+          <li><a href="#">Service Status</a></li>
+          <li><a href="#">Report an Issue</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 LogiTrack Logistics Ltd. All rights reserved.</span>
+      <div class="footer-bottom-links">
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+        <a href="#">Cookie Policy</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="{% static 'main.js' %}"></script>
+</body>
+</html>

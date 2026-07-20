@@ -1,0 +1,233 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Our Services — LogiTrack Global Logistics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'style.css' %}">
+</head>
+<body>
+
+  <!-- PAGE LOADER -->
+  <div id="page-loader">
+    <div class="loader-logo">Logi<span>Track</span></div>
+    <div class="loader-bar-track"><div class="loader-bar-fill"></div></div>
+    <div class="loader-text">Initialising…</div>
+  </div>
+
+  <!-- PAGE TRANSITION OVERLAY -->
+  <div id="page-transition"></div>
+
+  <!-- CUSTOM CURSOR -->
+  <div class="cursor-dot"></div>
+  <div class="cursor-ring"></div>
+
+  <!-- SCROLL PROGRESS -->
+  <div id="scroll-progress"></div>
+
+  <!-- TOAST CONTAINER -->
+  <div id="toast-container"></div>
+
+
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <div class="logo">
+      <div class="logo-icon">LG</div>
+      <span>LogiTrack</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="{% url 'homepage' %}">Home</a></li>
+      <li><a href="{% url 'about_page' %}">About</a></li>
+      <li><a href="{% url 'service_page' %}" class="active">Services</a></li>
+      <li><a href="{% url 'contact_page' %}">Contact</a></li>
+      <li><a href="{% url 'homepage'  %}" class="nav-cta">Track Your Package</a></li>
+    </ul>
+    <div class="hamburger"><span></span><span></span><span></span></div>
+  </nav>
+
+  <!-- LIVE CLOCK BAR -->
+  <div class="live-clock-bar">
+    <span class="live-badge">Live</span>
+    <span class="clock-zone"><span class="clock-flag">🇬🇧</span> LON <strong id="clock-lon">--:--:--</strong></span>
+    <span class="clock-zone"><span class="clock-flag">🇩🇪</span> FRA <strong id="clock-fra">--:--:--</strong></span>
+    <span class="clock-zone"><span class="clock-flag">🇦🇪</span> DXB <strong id="clock-dxb">--:--:--</strong></span>
+    <span class="clock-zone"><span class="clock-flag">🇸🇬</span> SGP <strong id="clock-sgp">--:--:--</strong></span>
+    <span class="clock-zone"><span class="clock-flag">🇺🇸</span> NYC <strong id="clock-nyc">--:--:--</strong></span>
+  </div>
+  <!-- PAGE HERO -->
+  <div class="page-hero">
+    <div class="breadcrumb">
+      <a href="{% url 'homepage' %}">Home</a>
+      <span>›</span>
+      <span>Services</span>
+    </div>
+    <h1>Our Services</h1>
+    <p>Comprehensive logistics solutions tailored to your business needs.</p>
+  </div>
+
+  <!-- SERVICE 1: International Express -->
+  <div class="service-full">
+    <div class="service-full-inner">
+      <div class="service-full-img reveal">
+        <img src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=900&q=80" alt="International Express" />
+      </div>
+      <div class="reveal">
+        <p class="section-tag">Air Freight</p>
+        <h2 class="section-title">International<br><em>Express</em></h2>
+        <p style="color: var(--gray); line-height: 1.8; margin-bottom: 20px;">Our flagship service — door-to-door express delivery to 220+ countries and territories. When speed is non-negotiable, International Express delivers.</p>
+        <div class="service-features">
+          <div class="feature-item"><div class="feature-dot"></div><p>Next-business-day delivery available to Europe and select global routes</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>Live GPS tracking with minute-by-minute shipment updates</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>Full customs clearance documentation handled by our team</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>Proactive delivery alerts via SMS, email, and WhatsApp</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>Money-back guarantee on all time-definite shipments</p></div>
+        </div>
+        <a href="{% url 'contact_page' %}" class="btn btn-red" style="display: inline-flex; margin-top: 28px; width: auto; padding: 14px 28px;">Get a Quote →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- SERVICE 2: Ocean Freight -->
+  <div class="service-full">
+    <div class="service-full-inner">
+      <div class="service-full-img reveal">
+        <img src="https://images.unsplash.com/photo-1605745341112-85968b19335b?w=900&q=80" alt="Ocean Freight" />
+      </div>
+      <div class="reveal">
+        <p class="section-tag">Sea Freight</p>
+        <h2 class="section-title">Ocean<br><em>Freight</em></h2>
+        <p style="color: var(--gray); line-height: 1.8; margin-bottom: 20px;">Cost-effective global shipping for large volumes. Our ocean freight network covers every major trade lane with flexible FCL and LCL options.</p>
+        <div class="service-features">
+          <div class="feature-item"><div class="feature-dot"></div><p>Full Container Load (FCL) and Less-than-Container Load (LCL)</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>Reefer containers for temperature-sensitive goods</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>Port-to-port and door-to-door options</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>Vessel tracking with AIS integration on our portal</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>Competitive spot and contract rates with major carriers</p></div>
+        </div>
+        <a href="{% url 'contact_page' %}" class="btn btn-red" style="display: inline-flex; margin-top: 28px; width: auto; padding: 14px 28px;">Get a Quote →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- SERVICE 3: Road Freight -->
+  <div class="service-full">
+    <div class="service-full-inner">
+      <div class="service-full-img reveal">
+        <img src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=900&q=80" alt="Road Freight" />
+      </div>
+      <div class="reveal">
+        <p class="section-tag">Ground Transport</p>
+        <h2 class="section-title">Road<br><em>Freight</em></h2>
+        <p style="color: var(--gray); line-height: 1.8; margin-bottom: 20px;">Pan-European and domestic road transport with industry-leading reliability. Our fleet includes electric vehicles, temperature-controlled units, and hazmat-certified trucks.</p>
+        <div class="service-features">
+          <div class="feature-item"><div class="feature-dot"></div><p>Full truckload (FTL) and groupage / LTL options</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>Live GPS tracking for all vehicles</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>Temperature-controlled transport: +2°C to +25°C and frozen</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>ADR certified drivers for hazardous materials</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>Carbon-neutral delivery option via our EV fleet</p></div>
+        </div>
+        <a href="{% url 'contact_page' %}" class="btn btn-red" style="display: inline-flex; margin-top: 28px; width: auto; padding: 14px 28px;">Get a Quote →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- SERVICE 4: Warehousing -->
+  <div class="service-full">
+    <div class="service-full-inner">
+      <div class="service-full-img reveal">
+        <img src="https://images.unsplash.com/photo-1553413077-190dd305871c?w=900&q=80" alt="Warehousing" />
+      </div>
+      <div class="reveal">
+        <p class="section-tag">3PL Fulfillment</p>
+        <h2 class="section-title">Warehousing &<br><em>Fulfillment</em></h2>
+        <p style="color: var(--gray); line-height: 1.8; margin-bottom: 20px;">Outsource your entire fulfilment operation to LogiTrack. We store, pick, pack, and dispatch orders from our strategically located hubs — so you can focus on growing your business.</p>
+        <div class="service-features">
+          <div class="feature-item"><div class="feature-dot"></div><p>50+ warehouse facilities across 2 continents, 12M sq ft total</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>Same-day dispatch for orders received before 2PM</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>Real-time inventory management portal</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>Seamless API integration with Shopify, WooCommerce, Amazon</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>Returns management and refurbishment services</p></div>
+        </div>
+        <a href="{% url 'contact_page' %}" class="btn btn-red" style="display: inline-flex; margin-top: 28px; width: auto; padding: 14px 28px;">Get a Quote →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- SERVICE 5: Customs Clearance -->
+  <div class="service-full">
+    <div class="service-full-inner">
+      <div class="service-full-img reveal">
+        <img src="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=900&q=80" alt="Customs" />
+      </div>
+      <div class="reveal">
+        <p class="section-tag">Import & Export</p>
+        <h2 class="section-title">Customs<br><em>Clearance</em></h2>
+        <p style="color: var(--gray); line-height: 1.8; margin-bottom: 20px;">Navigate the complexity of international trade compliance with our in-house customs team. We ensure every shipment clears without unnecessary delays or penalties.</p>
+        <div class="service-features">
+          <div class="feature-item"><div class="feature-dot"></div><p>Licensed customs brokers in all major import/export markets</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>HS code classification and duty optimization</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>Import VAT deferment and duty drawback management</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>AEO (Authorised Economic Operator) certified status</p></div>
+          <div class="feature-item"><div class="feature-dot"></div><p>Restricted goods licensing and special permits</p></div>
+        </div>
+        <a href="{% url 'contact_page' %}" class="btn btn-red" style="display: inline-flex; margin-top: 28px; width: auto; padding: 14px 28px;">Get a Quote →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-band">
+    <h2>Not Sure Which<br>Service You Need?</h2>
+    <p>Our logistics consultants will analyse your needs and recommend the best solution — for free.</p>
+    <div class="cta-btns">
+      <a href="{% url 'contact_page' %}" class="btn btn-white">Talk to an Expert →</a>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="logo"><div class="logo-icon">LG</div>Logi<span>Track</span></div>
+        <p>Global logistics partner for businesses of all sizes. Delivering certainty from origin to destination since 2026.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Services</h4>
+        <ul>
+          <li><a href="{% url 'service_page' %}">International Express</a></li>
+          <li><a href="{% url 'service_page' %}">Ocean Freight</a></li>
+          <li><a href="{% url 'service_page' %}">Road Freight</a></li>
+          <li><a href="{% url 'service_page' %}">Warehousing</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="{% url 'about_page' %}">About Us</a></li>
+          <li><a href="#">Careers</a></li>
+          <li><a href="{% url 'contact_page' %}">Contact</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <ul>
+          <li><a href="{% url 'homepage' %}">Track a Shipment</a></li>
+          <li><a href="#">Help Center</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 LogiTrack Logistics Ltd. All rights reserved.</span>
+      <div class="footer-bottom-links">
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="{% static 'main.js' %}"></script>
+</body>
+</html>

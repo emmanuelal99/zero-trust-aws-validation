@@ -1,0 +1,315 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contact Us — LogiTrack Global Logistics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'style.css' %}">
+</head>
+<body>
+
+  <!-- PAGE LOADER -->
+  <div id="page-loader">
+    <div class="loader-logo">Logi<span>Track</span></div>
+    <div class="loader-bar-track"><div class="loader-bar-fill"></div></div>
+    <div class="loader-text">Initialising…</div>
+  </div>
+
+  <!-- PAGE TRANSITION OVERLAY -->
+  <div id="page-transition"></div>
+
+  <!-- CUSTOM CURSOR -->
+  <div class="cursor-dot"></div>
+  <div class="cursor-ring"></div>
+
+  <!-- SCROLL PROGRESS -->
+  <div id="scroll-progress"></div>
+
+  <!-- TOAST CONTAINER -->
+  <div id="toast-container"></div>
+
+
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <div class="logo">
+      <div class="logo-icon">LG</div>
+      Logi<span>Track</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="{% url 'homepage' %}">Home</a></li>
+      <li><a href="{% url 'about_page' %}">About</a></li>
+      <li><a href="{% url 'service_page' %}">Services</a></li>
+      <li><a href="{% url 'contact_page' %}" class="active">Contact</a></li>
+      <li><a href="{% url 'homepage'  %}" class="nav-cta">Track Your Package</a></li>
+    </ul>
+    <div class="hamburger"><span></span><span></span><span></span></div>
+  </nav>
+
+  <!-- LIVE CLOCK BAR -->
+  <div class="live-clock-bar">
+    <span class="live-badge">Live</span>
+    <span class="clock-zone"><span class="clock-flag">🇬🇧</span> LON <strong id="clock-lon">--:--:--</strong></span>
+    <span class="clock-zone"><span class="clock-flag">🇩🇪</span> FRA <strong id="clock-fra">--:--:--</strong></span>
+    <span class="clock-zone"><span class="clock-flag">🇦🇪</span> DXB <strong id="clock-dxb">--:--:--</strong></span>
+    <span class="clock-zone"><span class="clock-flag">🇸🇬</span> SGP <strong id="clock-sgp">--:--:--</strong></span>
+    <span class="clock-zone"><span class="clock-flag">🇺🇸</span> NYC <strong id="clock-nyc">--:--:--</strong></span>
+  </div>
+  <!-- PAGE HERO -->
+  <div class="page-hero">
+    <div class="breadcrumb">
+      <a href="{% url 'homepage' %}">Home</a>
+      <span>›</span>
+      <span>Contact</span>
+    </div>
+    <h1>Get in Touch</h1>
+    <p>We're ready to solve your logistics challenges. Reach out today.</p>
+  </div>
+
+  <!-- CONTACT SECTION -->
+  <div style="background: white;">
+    <div class="section">
+      <div class="contact-grid">
+
+        <!-- LEFT: Info -->
+        <div>
+          <p class="section-tag reveal">Reach Us</p>
+          <h2 class="section-title reveal">Let's Build<br>Your <em>Solution</em></h2>
+          <p style="color:var(--gray); line-height:1.8; margin-bottom: 40px;" class="reveal">Whether you need an instant quote, have a complex logistics challenge, or want to onboard as a business customer — our team responds within 2 hours.</p>
+
+          <div class="contact-info">
+            <div class="contact-item reveal">
+              <div class="contact-icon">📞</div>
+              <div>
+                <h4>Phone Support</h4>
+                <p>+44 123 456 7890<br>Mon–Fri 07:00–22:00 GMT<br>Sat–Sun 08:00–18:00 GMT</p>
+              </div>
+            </div>
+            <div class="contact-item reveal">
+              <div class="contact-icon">📧</div>
+              <div>
+                <h4>Email Us</h4>
+                <p>support@example.com<br>quotes@example.com<br>Response within 2 hours</p>
+              </div>
+            </div>
+            <div class="contact-item reveal">
+              <div class="contact-icon">📍</div>
+              <div>
+                <h4>Global Headquarters</h4>
+                <p>Greater Manchester<br>Greater Manchester, 0000, United Kingdom</p>
+              </div>
+            </div>
+            <div class="contact-item reveal">
+              <div class="contact-icon">💬</div>
+              <div>
+                <h4>Live Chat</h4>
+                <p>Available on our website and app.<br>Average response time: 4 minutes</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Regional Offices -->
+          <div style="margin-top: 48px;" class="reveal">
+            <h3 style="font-family: var(--font-display); font-size:1rem; text-transform:uppercase; letter-spacing:2px; color:var(--gray); margin-bottom:20px;">Regional Offices</h3>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+              <div style="padding:16px; background:var(--off-white); border-radius:8px;">
+                <strong style="font-size:0.85rem;">🇬🇧 London, UK</strong>
+                <p style="font-size:0.8rem; color:var(--gray); margin-top:4px;"></p>
+              </div>
+              <div style="padding:16px; background:var(--off-white); border-radius:8px;">
+                <strong style="font-size:0.85rem;">🇬🇧 Manchester, UK</strong>
+                <p style="font-size:0.8rem; color:var(--gray); margin-top:4px;"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: Form -->
+        <div class="reveal">
+          <div class="contact-form">
+            <h3 style="font-family:var(--font-display); font-size:1.4rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Send Us a Message</h3>
+            <p style="font-size:0.85rem; color:var(--gray); margin-bottom:28px;">Fill in the form and a logistics consultant will be in touch within 2 hours.</p>
+
+            {% if messages %}
+             <div style="margin-bottom: 24px;">
+                {% for message in messages %}
+                    <div style="padding: 16px 20px; border-radius: 8px; font-weight: 600; font-size: 0.95rem; color: white; background-color: {% if message.tags == 'error' %}#D40511{% else %}#198754{% endif %}; box-shadow: 0 4px 15px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 10px;">
+                        {% if message.tags == 'error' %} ⚠️ {% else %} ✅ {% endif %}
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+
+            <form id="contactForm" method="POST" action="{% url 'contact_page' %}">
+              {% csrf_token %}
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>First Name *</label>
+                  <input type="text" name="first_name" placeholder="John" required />
+                </div>
+                <div class="form-group">
+                  <label>Last Name *</label>
+                  <input type="text" name="last_name" placeholder="Smith" required />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Email Address *</label>
+                  <input type="email" name="email" placeholder="john@company.com" required />
+                </div>
+                <div class="form-group">
+                  <label>Phone Number</label>
+                  <input type="tel" name="phone_number" placeholder="+44 7700 000000" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Service Enquiry *</label>
+                <select name="service_enquiry" required>
+                  <option value="" disabled selected>Select a service...</option>
+                  <option value="International Express">International Express</option>
+                  <option value="Ocean Freight">Ocean Freight</option>
+                  <option value="Road Freight">Road Freight</option>
+                  <option value="Warehousing & Fulfillment">Warehousing & Fulfillment</option>
+                  <option value="Customs Clearance">Customs Clearance</option>
+                  <option value="General Enquiry">General Enquiry</option>
+                  <option value="Track a Shipment">Track a Shipment</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Origin Country</label>
+                  <input type="text" name="origin_country" placeholder="e.g. United Kingdom" />
+                </div>
+                <div class="form-group">
+                  <label>Destination Country</label>
+                  <input type="text" name="destination_country" placeholder="e.g. Germany" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Your Message *</label>
+                <textarea name="message" placeholder="Tell us about your shipment requirements, volume, frequency, or any specific needs..." required></textarea>
+              </div>
+
+              <div style="display:flex; align-items:center; gap:10px; margin-bottom:20px;">
+                <input type="checkbox" id="consent" style="width:auto; min-width:0; width:18px; height:18px;" required />
+                <label for="consent" style="font-size:0.8rem; color:var(--gray); text-transform:none; letter-spacing:0; font-weight:400; margin:0;">I agree to LogiTrack <a href="#" style="color:var(--red);">Privacy Policy</a> and consent to being contacted.</label>
+              </div>
+
+              <button type="submit" class="btn btn-red">Send Message →</button>
+            </form>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- MAP BAND -->
+  <div style="background: var(--dark); padding: 64px 48px; text-align: center;">
+    <p class="section-tag" style="color: rgba(255,204,0,0.7); margin-bottom: 12px;">Global Network</p>
+    <h2 style="font-family:var(--font-display); font-size:clamp(1.8rem,4vw,3rem); font-weight:800; color:white; text-transform:uppercase; letter-spacing:-1px; margin-bottom:12px;">
+      Wherever You Ship,<br><em style="color:var(--yellow)">We're Already There</em>
+    </h2>
+    <p style="color:rgba(255,255,255,0.5); max-width:480px; margin:0 auto 40px; font-size:0.95rem; line-height:1.7;">
+      With 350+ service hubs across every continent, SwiftLog has local expertise in every market your business needs.
+    </p>
+    <!-- Stylized world map SVG representation -->
+    <div style="max-width: 900px; margin: 0 auto; position:relative;">
+      <svg viewBox="0 0 900 400" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%; opacity:0.85;">
+        <!-- Grid lines -->
+        <g stroke="rgba(255,255,255,0.05)" stroke-width="1">
+          <line x1="0" y1="100" x2="900" y2="100"/>
+          <line x1="0" y1="200" x2="900" y2="200"/>
+          <line x1="0" y1="300" x2="900" y2="300"/>
+          <line x1="150" y1="0" x2="150" y2="400"/>
+          <line x1="300" y1="0" x2="300" y2="400"/>
+          <line x1="450" y1="0" x2="450" y2="400"/>
+          <line x1="600" y1="0" x2="600" y2="400"/>
+          <line x1="750" y1="0" x2="750" y2="400"/>
+        </g>
+        <!-- Simplified continent shapes -->
+        <!-- North America -->
+        <ellipse cx="160" cy="160" rx="90" ry="90" fill="rgba(212,5,17,0.12)" stroke="rgba(212,5,17,0.3)" stroke-width="1.5"/>
+        <!-- South America -->
+        <ellipse cx="225" cy="285" rx="55" ry="75" fill="rgba(212,5,17,0.08)" stroke="rgba(212,5,17,0.2)" stroke-width="1"/>
+        <!-- Europe -->
+        <ellipse cx="445" cy="130" rx="55" ry="55" fill="rgba(255,204,0,0.15)" stroke="rgba(255,204,0,0.4)" stroke-width="1.5"/>
+        <!-- Africa -->
+        <ellipse cx="460" cy="265" rx="65" ry="90" fill="rgba(212,5,17,0.08)" stroke="rgba(212,5,17,0.2)" stroke-width="1"/>
+        <!-- Asia -->
+        <ellipse cx="640" cy="155" rx="130" ry="90" fill="rgba(212,5,17,0.1)" stroke="rgba(212,5,17,0.25)" stroke-width="1"/>
+        <!-- Australia -->
+        <ellipse cx="730" cy="300" rx="60" ry="45" fill="rgba(212,5,17,0.07)" stroke="rgba(212,5,17,0.2)" stroke-width="1"/>
+        <!-- Hub dots -->
+        <circle cx="160" cy="145" r="7" fill="#D40511" opacity="0.9"/>
+        <circle cx="447" cy="118" r="9" fill="#FFCC00" opacity="0.95"/>
+        <circle cx="590" cy="145" r="6" fill="#D40511" opacity="0.8"/>
+        <circle cx="710" cy="150" r="7" fill="#D40511" opacity="0.85"/>
+        <circle cx="730" cy="295" r="5" fill="#D40511" opacity="0.7"/>
+        <circle cx="225" cy="270" r="5" fill="#D40511" opacity="0.7"/>
+        <circle cx="460" cy="250" r="5" fill="#D40511" opacity="0.65"/>
+        <!-- Connection lines -->
+        <line x1="160" y1="145" x2="447" y2="118" stroke="rgba(255,204,0,0.2)" stroke-width="1.5" stroke-dasharray="5,5"/>
+        <line x1="447" y1="118" x2="590" y2="145" stroke="rgba(212,5,17,0.3)" stroke-width="1.5" stroke-dasharray="5,5"/>
+        <line x1="590" y1="145" x2="710" y2="150" stroke="rgba(212,5,17,0.3)" stroke-width="1.5" stroke-dasharray="5,5"/>
+        <line x1="447" y1="118" x2="460" y2="250" stroke="rgba(212,5,17,0.2)" stroke-width="1" stroke-dasharray="4,6"/>
+        <line x1="160" y1="145" x2="225" y2="270" stroke="rgba(212,5,17,0.2)" stroke-width="1" stroke-dasharray="4,6"/>
+        <line x1="710" y1="150" x2="730" y2="295" stroke="rgba(212,5,17,0.2)" stroke-width="1" stroke-dasharray="4,6"/>
+        <!-- Labels -->
+        <text x="138" y="172" fill="rgba(255,255,255,0.5)" font-size="9" font-family="sans-serif">New York</text>
+        <text x="420" y="107" fill="rgba(255,204,0,0.9)" font-size="10" font-family="sans-serif" font-weight="bold">Hamburg HQ</text>
+        <text x="568" y="170" fill="rgba(255,255,255,0.5)" font-size="9" font-family="sans-serif">Dubai</text>
+        <text x="690" y="140" fill="rgba(255,255,255,0.5)" font-size="9" font-family="sans-serif">Singapore</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="logo"><div class="logo-icon">LG</div>Logi<span>Track</span></div>
+        <p>Global logistics partner for businesses of all sizes. Delivering certainty from origin to destination since 1994.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Services</h4>
+        <ul>
+          <li><a href="{% url 'service_page' %}">International Express</a></li>
+          <li><a href="{% url 'service_page' %}">Ocean Freight</a></li>
+          <li><a href="{% url 'service_page' %}">Road Freight</a></li>
+          <li><a href="{% url 'service_page' %}">Warehousing</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="{% url 'about_page' %}">About Us</a></li>
+          <li><a href="#">Careers</a></li>
+          <li><a href="{% url 'contact_page' %}">Contact</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <ul>
+          <li><a href="{% url 'homepage' %}">Track a Shipment</a></li>
+          <li><a href="#">Help Center</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 LogiTrack Logistics Ltd. All rights reserved.</span>
+      <div class="footer-bottom-links">
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="{% static 'main.js' %}"></script>
+</body>
+</html>

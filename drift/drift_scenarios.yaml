@@ -1,0 +1,253 @@
+# =============================================================================
+# Drift-injection scenarios — dissertation Table 3.3
+#
+# Each scenario is a controlled, revertible mutation of a DEPLOYED environment that moves
+# it away from its Terraform baseline. Scenarios are grouped by DETECTION CHANNEL so the
+# CBCS-based CDI stays clean:
+#
+#   detection: prowler_cbcs   -> changes the Prowler CIS AWS Foundations result; feeds
+#                                CBCS_current and therefore CDI = 1 - (CBCS_current/CBCS_baseline).
+#   detection: nuclei         -> app-layer; detected by Nuclei, NOT Prowler. Excluded from CDI.
+#   detection: terraform_plan -> IaC drift; detected by `terraform plan -detailed-exitcode`,
+#                                NOT Prowler. Excluded from CDI.
+#
+# The CDI pipeline stage runs `run_drift.py --channel prowler_cbcs`, so D7/D8 never touch
+# the CBCS calculation. Reverts always run under `if: always()` in the workflow.
+#
+# Snippets run via bash and may use these env vars (exported from Terraform outputs / lookups
+# by the pipeline before injection):
+#   AWS_REGION, ACCOUNT_ID, APP_SG_ID, DB_SG_ID, ALB_SG_ID, DB_INSTANCE_ID,
+#   INSTANCE_ROLE_NAME, VPC_ID, CLOUDTRAIL_NAME, NAME_PREFIX
+#
+# `moves_cbcs` documents whether/what conditions the scenario shifts CBCS.
+# =============================================================================
+scenarios:
+  # ---------------------------------------------------------------------------
+  # D1 — Network Exposure (CIS 5.2: no SG ingress from 0.0.0.0/0 to admin ports)
+  # Targets the ALB SG (not the app SG) so it fails CIS 5.2 without opening a real
+  # SSH path, and avoids colliding with Env A's pre-existing app-SG :22 rule.
+  # ---------------------------------------------------------------------------
+  - id: D1
+    name: Network Exposure
+    description: A security group allows SSH (tcp/22) from 0.0.0.0/0.
+    detection: prowler_cbcs
+    target_cis: "5.2"
+    environment: [A, B]
+    moves_cbcs: "Yes — Prowler ec2_securitygroup check flags 22 open to the world."
+    apply: |
+      aws ec2 authorize-security-group-ingress --region "$AWS_REGION" \
+        --group-id "$ALB_SG_ID" --protocol tcp --port 22 --cidr 0.0.0.0/0
+    revert: |
+      aws ec2 revoke-security-group-ingress --region "$AWS_REGION" \
+        --group-id "$ALB_SG_ID" --protocol tcp --port 22 --cidr 0.0.0.0/0 || true
+
+  # ---------------------------------------------------------------------------
+  # D2 — IAM Privilege Escalation (CIS 1.16: no policy grants full *:* admin)
+  # NOTE: attaching AWS-managed AdministratorAccess does NOT reliably move CIS 1.16
+  # (Prowler evaluates CUSTOMER-managed policies). We create a customer-managed *:*
+  # policy and attach it to the instance role so the CBCS delta is real.
+  # ---------------------------------------------------------------------------
+  - id: D2
+    name: IAM Privilege Escalation
+    description: A customer-managed policy granting *:* is attached to the instance role.
+    detection: prowler_cbcs
+    target_cis: "1.16"
+    environment: [A, B]
+    moves_cbcs: "Yes — customer-managed *:* policy trips CIS 1.16 (AWS-managed AdministratorAccess would not)."
+    apply: |
+      POLICY_ARN=$(aws iam create-policy \
+        --policy-name "${NAME_PREFIX}-drift-admin" \
+        --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"*","Resource":"*"}]}' \
+        --query 'Policy.Arn' --output text 2>/dev/null \
+        || echo "arn:aws:iam::${ACCOUNT_ID}:policy/${NAME_PREFIX}-drift-admin")
+      aws iam attach-role-policy --role-name "$INSTANCE_ROLE_NAME" --policy-arn "$POLICY_ARN"
+    revert: |
+      POLICY_ARN="arn:aws:iam::${ACCOUNT_ID}:policy/${NAME_PREFIX}-drift-admin"
+      aws iam detach-role-policy --role-name "$INSTANCE_ROLE_NAME" --policy-arn "$POLICY_ARN" || true
+      aws iam delete-policy --policy-arn "$POLICY_ARN" || true
+
+  # ---------------------------------------------------------------------------
+  # D3 — Public Data Exposure (CIS 2.1.5: S3 buckets block public access)
+  # No app S3 bucket exists in the environments, so the scenario stands up a dedicated
+  # bucket and removes its public-access block, then tears it down on revert.
+  # ---------------------------------------------------------------------------
+  - id: D3
+    name: Public Data Exposure
+    description: An S3 bucket has its Block Public Access configuration removed.
+    detection: prowler_cbcs
+    target_cis: "2.1.5"
+    environment: [A, B]
+    moves_cbcs: "Yes at the bucket level; caveat: account-level BPA (if enabled) can mask real exposure but the bucket-level check still fails."
+    apply: |
+      BUCKET="${NAME_PREFIX}-drift-public-${ACCOUNT_ID}"
+      aws s3api create-bucket --bucket "$BUCKET" --region "$AWS_REGION" \
+        --create-bucket-configuration LocationConstraint="$AWS_REGION" 2>/dev/null || true
+      aws s3api delete-public-access-block --bucket "$BUCKET"
+    revert: |
+      BUCKET="${NAME_PREFIX}-drift-public-${ACCOUNT_ID}"
+      aws s3api put-public-access-block --bucket "$BUCKET" \
+        --public-access-block-configuration \
+        BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true || true
+      aws s3 rb "s3://$BUCKET" --force || true
+
+  # ---------------------------------------------------------------------------
+  # D4 — Logging Configuration (CIS 3.1: CloudTrail enabled)
+  # ---------------------------------------------------------------------------
+  - id: D4
+    name: Logging Configuration
+    description: CloudTrail logging is stopped on the account trail.
+    detection: prowler_cbcs
+    target_cis: "3.1"
+    environment: [A, B]
+    moves_cbcs: "Only if a trail exists AND was logging at baseline. If no trail exists, CIS 3.1 already fails at baseline and CDI sees no delta (flagged)."
+    apply: |
+      if [ -n "${CLOUDTRAIL_NAME:-}" ]; then
+        aws cloudtrail stop-logging --name "$CLOUDTRAIL_NAME" --region "$AWS_REGION"
+      else
+        echo "No CloudTrail trail resolved — D4 has no effect (CIS 3.1 already failing)."
+      fi
+    revert: |
+      if [ -n "${CLOUDTRAIL_NAME:-}" ]; then
+        aws cloudtrail start-logging --name "$CLOUDTRAIL_NAME" --region "$AWS_REGION" || true
+      fi
+
+  # ---------------------------------------------------------------------------
+  # D5 — Encryption Drift (CIS 2.2.1: EBS default encryption enabled)
+  # Region-level EC2 attribute; cleanly mutable and revertible.
+  # ---------------------------------------------------------------------------
+  - id: D5
+    name: Encryption Drift
+    description: EBS encryption-by-default is disabled for the region.
+    detection: prowler_cbcs
+    target_cis: "2.2.1"
+    environment: [A, B]
+    moves_cbcs: "Yes — Prowler ec2_ebs_default_encryption (CIS 2.2.1) fails when default encryption is off."
+    apply: |
+      aws ec2 disable-ebs-encryption-by-default --region "$AWS_REGION"
+    revert: |
+      aws ec2 enable-ebs-encryption-by-default --region "$AWS_REGION" || true
+
+  # ---------------------------------------------------------------------------
+  # D6 — Identity Configuration (SUBSTITUTE: CIS 1.8 password policy min length)
+  # Original intent was MFA removal (CIS 1.10), but this setup uses instance ROLES
+  # (no console users / MFA to mutate). Chosen substitute weakens the account IAM
+  # password policy: account-level, always revertible, low standing risk, and a
+  # Prowler-checked identity control. (CIS 1.14 key-rotation and CIS 1.12 root key
+  # are NOT cleanly mutable in-pipeline — can't backdate a key or create a root key.)
+  #
+  # SNAPSHOT/RESTORE: `apply` first captures the EXACT current account password
+  # policy to /tmp/${NAME_PREFIX}-pwpolicy-snapshot.json (or writes a "NONE" marker
+  # if no policy exists), then weakens it. `revert` rebuilds that exact snapshot
+  # (or DELETES the policy if the marker is NONE). This guarantees every one of the
+  # 30+ repeated runs starts from an identical baseline so the CDI is comparable —
+  # revert no longer hard-codes an assumed "strong" policy.
+  # ---------------------------------------------------------------------------
+  - id: D6
+    name: Identity Configuration
+    description: The account IAM password policy is weakened (minimum length reduced); original policy is snapshotted and restored on revert.
+    detection: prowler_cbcs
+    target_cis: "1.8"
+    environment: [A, B]
+    moves_cbcs: "Only if the password policy passes at baseline. If the account has no/weak policy already, CIS 1.8 fails at baseline and CDI sees no delta (flagged)."
+    apply: |
+      SNAP="/tmp/${NAME_PREFIX}-pwpolicy-snapshot.json"
+      if aws iam get-account-password-policy > "$SNAP" 2>/dev/null; then
+        echo "D6: snapshotted existing password policy -> $SNAP"
+      else
+        echo "NONE" > "$SNAP"
+        echo "D6: no password policy at baseline — recorded NONE marker in $SNAP"
+      fi
+      aws iam update-account-password-policy \
+        --minimum-password-length 6 \
+        --no-require-symbols --no-require-numbers \
+        --no-require-uppercase-characters --no-require-lowercase-characters
+    revert: |
+      SNAP="/tmp/${NAME_PREFIX}-pwpolicy-snapshot.json"
+      if [ ! -f "$SNAP" ]; then
+        echo "D6: no snapshot file found ($SNAP) — cannot restore exact baseline; leaving policy as-is." >&2
+        exit 0
+      fi
+      if [ "$(cat "$SNAP")" = "NONE" ]; then
+        echo "D6: baseline had no policy — deleting account password policy."
+        aws iam delete-account-password-policy || true
+        exit 0
+      fi
+      # Rebuild the exact snapshotted policy. Boolean flags are emitted as
+      # --require-X / --no-require-X from the captured JSON; numeric fields are
+      # only passed when they were present in the snapshot.
+      ARGS=$(python3 - "$SNAP" <<'PY'
+      import json, sys, shlex
+      pol = json.load(open(sys.argv[1]))["PasswordPolicy"]
+      a = []
+      bools = {
+          "RequireSymbols": "symbols",
+          "RequireNumbers": "numbers",
+          "RequireUppercaseCharacters": "uppercase-characters",
+          "RequireLowercaseCharacters": "lowercase-characters",
+          "AllowUsersToChangePassword": "allow-users-to-change-password",
+      }
+      for k, flag in bools.items():
+          if k in pol:
+              a.append(f"--{'' if pol[k] else 'no-'}require-{flag}"
+                       if flag not in ("allow-users-to-change-password",)
+                       else (f"--{flag}" if pol[k] else f"--no-{flag}"))
+      if "MinimumPasswordLength" in pol:
+          a += ["--minimum-password-length", str(pol["MinimumPasswordLength"])]
+      if pol.get("MaxPasswordAge"):
+          a += ["--max-password-age", str(pol["MaxPasswordAge"])]
+      if pol.get("PasswordReusePrevention"):
+          a += ["--password-reuse-prevention", str(pol["PasswordReusePrevention"])]
+      print(" ".join(shlex.quote(x) for x in a))
+      PY
+      )
+      echo "D6: restoring snapshotted password policy: $ARGS"
+      eval "aws iam update-account-password-policy $ARGS" || true
+
+  # ---------------------------------------------------------------------------
+  # D7 — Application Configuration (app-layer; detected by NUCLEI, not Prowler)
+  # Removes HTTP security headers from the Django app. Excluded from CBCS/CDI.
+  # Depends on the real Logi-Track deployment (user-data is still a placeholder), so the
+  # snippet is best-effort via SSM RunCommand against the app instances.
+  # ---------------------------------------------------------------------------
+  - id: D7
+    name: Application Configuration
+    description: Security headers (HSTS, X-Frame-Options, CSP, ...) are removed from the app responses.
+    detection: nuclei
+    target_tool: "Nuclei (http-missing-security-headers templates)"
+    environment: [A, B]
+    moves_cbcs: "No — app-layer misconfiguration; invisible to Prowler/CIS. Detected by Nuclei only."
+    apply: |
+      INSTANCE_IDS=$(aws ec2 describe-instances --region "$AWS_REGION" \
+        --filters "Name=tag:Name,Values=${NAME_PREFIX}-app" "Name=instance-state-name,Values=running" \
+        --query 'Reservations[].Instances[].InstanceId' --output text)
+      [ -z "$INSTANCE_IDS" ] && { echo "No app instances (placeholder app) — D7 no-op."; exit 0; }
+      aws ssm send-command --region "$AWS_REGION" --instance-ids $INSTANCE_IDS \
+        --document-name AWS-RunShellScript \
+        --parameters 'commands=["touch /etc/logitrack/DRIFT_NO_SECURITY_HEADERS","systemctl restart logitrack || true"]' || true
+    revert: |
+      INSTANCE_IDS=$(aws ec2 describe-instances --region "$AWS_REGION" \
+        --filters "Name=tag:Name,Values=${NAME_PREFIX}-app" "Name=instance-state-name,Values=running" \
+        --query 'Reservations[].Instances[].InstanceId' --output text)
+      [ -z "$INSTANCE_IDS" ] && exit 0
+      aws ssm send-command --region "$AWS_REGION" --instance-ids $INSTANCE_IDS \
+        --document-name AWS-RunShellScript \
+        --parameters 'commands=["rm -f /etc/logitrack/DRIFT_NO_SECURITY_HEADERS","systemctl restart logitrack || true"]' || true
+
+  # ---------------------------------------------------------------------------
+  # D8 — Infrastructure Drift (detected by `terraform plan`, not Prowler)
+  # Mutates a Terraform-managed resource out-of-band so plan reports drift. Excluded
+  # from CBCS/CDI. Revert removes the out-of-band change (no terraform apply needed).
+  # ---------------------------------------------------------------------------
+  - id: D8
+    name: Infrastructure Drift
+    description: A tag is added to a Terraform-managed resource (VPC) via the AWS API.
+    detection: terraform_plan
+    target_tool: "terraform plan -detailed-exitcode (exit code 2 = drift)"
+    environment: [A, B]
+    moves_cbcs: "No — state/IaC consistency drift; not a CIS control. Detected by terraform plan."
+    apply: |
+      aws ec2 create-tags --region "$AWS_REGION" --resources "$VPC_ID" \
+        --tags Key=drift-injected,Value=D8
+    revert: |
+      aws ec2 delete-tags --region "$AWS_REGION" --resources "$VPC_ID" \
+        --tags Key=drift-injected,Value=D8 || true
