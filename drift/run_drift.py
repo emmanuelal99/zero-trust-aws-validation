@@ -18,6 +18,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -29,6 +30,22 @@ except ImportError:  # pragma: no cover
 
 HERE = Path(__file__).resolve().parent
 SCENARIOS_FILE = HERE / "drift_scenarios.yaml"
+
+def missing_resources(scenario: dict) -> list[str]:
+    """Return the required resource env vars that resolve to None/empty.
+
+    Scenarios that mutate a *deployed* resource declare the env vars carrying that
+    resource's ID/name via `requires:` in drift_scenarios.yaml. On plan-only runs those
+    lookups yield "" or the literal string "None" (AWS CLI `--output text` on a null
+    scalar), which would make the AWS call fail with e.g. "The ID 'None' is not valid".
+    When any required var is absent we skip the scenario so plan-only runs stay clean.
+    """
+    missing = []
+    for var in scenario.get("requires", []):
+        val = os.environ.get(var, "").strip()
+        if val == "" or val.lower() == "none":
+            missing.append(var)
+    return missing
 
 
 def load_scenarios() -> list[dict]:
@@ -89,6 +106,11 @@ def main() -> int:
 
     failures = 0
     for s in ordered:
+        missing = missing_resources(s)
+        if missing:
+            print(f"[{s['id']}] no infrastructure ({', '.join(missing)} resolved to "
+                  f"None/empty) — skipping {s['id']} on plan-only run.")
+            continue
         ok = run_snippet(s["id"], phase, s.get(phase, ""))
         if not ok:
             failures += 1

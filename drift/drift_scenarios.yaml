@@ -20,6 +20,8 @@
 #   INSTANCE_ROLE_NAME, VPC_ID, CLOUDTRAIL_NAME, NAME_PREFIX
 #
 # `moves_cbcs` documents whether/what conditions the scenario shifts CBCS.
+# `requires` lists the resource env vars a scenario needs; run_drift.py skips the scenario
+# gracefully (exit 0) when any resolve to ""/"None" — i.e. plan-only runs with no live infra.
 # =============================================================================
 scenarios:
   # ---------------------------------------------------------------------------
@@ -33,6 +35,7 @@ scenarios:
     detection: prowler_cbcs
     target_cis: "5.2"
     environment: [A, B]
+    requires: [ALB_SG_ID]   # skip on plan-only runs (no deployed SG to mutate)
     moves_cbcs: "Yes — Prowler ec2_securitygroup check flags 22 open to the world."
     apply: |
       aws ec2 authorize-security-group-ingress --region "$AWS_REGION" \
@@ -53,6 +56,7 @@ scenarios:
     detection: prowler_cbcs
     target_cis: "1.16"
     environment: [A, B]
+    requires: [INSTANCE_ROLE_NAME]   # skip on plan-only runs (no deployed role to attach to)
     moves_cbcs: "Yes — customer-managed *:* policy trips CIS 1.16 (AWS-managed AdministratorAccess would not)."
     apply: |
       POLICY_ARN=$(aws iam create-policy \
@@ -99,6 +103,7 @@ scenarios:
     detection: prowler_cbcs
     target_cis: "3.1"
     environment: [A, B]
+    requires: [CLOUDTRAIL_NAME]   # skip on plan-only runs (also catches the literal "None" the inline guard misses)
     moves_cbcs: "Only if a trail exists AND was logging at baseline. If no trail exists, CIS 3.1 already fails at baseline and CDI sees no delta (flagged)."
     apply: |
       if [ -n "${CLOUDTRAIL_NAME:-}" ]; then
@@ -244,6 +249,7 @@ scenarios:
     detection: terraform_plan
     target_tool: "terraform plan -detailed-exitcode (exit code 2 = drift)"
     environment: [A, B]
+    requires: [VPC_ID]   # skip on plan-only runs (no deployed VPC to tag)
     moves_cbcs: "No — state/IaC consistency drift; not a CIS control. Detected by terraform plan."
     apply: |
       aws ec2 create-tags --region "$AWS_REGION" --resources "$VPC_ID" \
