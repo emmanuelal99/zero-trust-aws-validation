@@ -5,7 +5,7 @@
 # The bucket name must match bootstrap/terraform.tfvars.
 
 terraform {
-    backend "s3" {
+  backend "s3" {
     bucket         = "zt-dissertation-tfstate-emmanuelal99"
     key            = "environment-a/terraform.tfstate"
     region         = "eu-west-2"
