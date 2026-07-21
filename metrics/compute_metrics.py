@@ -153,15 +153,28 @@ _SEVERITY_ORDER = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
 
 def _read_jsonl(path: Path) -> list[dict]:
-    """Read a JSON-lines file; tolerate blank lines. Missing file -> empty list."""
+    """Read a JSON-lines file; tolerate blank lines. Missing file -> empty list.
+
+    Malformed lines are skipped with a warning rather than aborting the whole
+    computation. The Wazuh alerts export is pulled over an SSM channel with a bounded
+    output size; if a payload is ever truncated the final line can be cut mid-string,
+    and one bad line must not zero out an otherwise-valid MTTD run.
+    """
     if not path.exists():
         return []
     records = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         line = line.strip()
         if not line:
             continue
-        records.append(json.loads(line))
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError as e:
+            print(
+                f"WARN: skipping malformed JSON at {path}:{lineno} ({e}); "
+                "line likely truncated in transit.",
+                file=sys.stderr,
+            )
     return records
 
 

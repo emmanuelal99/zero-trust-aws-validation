@@ -205,7 +205,10 @@ resource "aws_instance" "wazuh" {
         <run_on_start>yes</run_on_start>
         <bucket type="cloudtrail">
           <name>${var.trail_bucket_name}</name>
-          <regions>${var.aws_region}</regions>
+          <!-- Poll the regional path AND us-east-1: CloudTrail records GLOBAL-service events
+               (IAM, STS) under the us-east-1 prefix regardless of the trail's home region, so
+               without us-east-1 the CreateUser (100812) rule never sees its event. -->
+          <regions>${var.aws_region},us-east-1</regions>
         </bucket>
       </wodle>
     WODLEEOF

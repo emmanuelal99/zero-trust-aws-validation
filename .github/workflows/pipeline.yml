@@ -99,6 +99,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Trivy IaC scan
+        id: trivy
+        # Non-blocking: Trivy is not one of the five metrics. The config scan can fail fast when
+        # the misconfig checks/policy bundle can't be pulled from GHCR (anonymous rate-limit),
+        # which would otherwise leave trivy-results.sarif unwritten and fail the whole job.
+        continue-on-error: true
         uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: config
@@ -106,10 +111,16 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           exit-code: '0'
+      - name: Show Trivy result presence
+        if: always()
+        run: ls -l trivy-results.sarif 2>/dev/null || echo "No SARIF produced (Trivy step failed early)."
+      # Only upload when the SARIF actually exists, so a Trivy hiccup can't fail these steps.
       - uses: github/codeql-action/upload-sarif@v3
+        if: ${{ always() && hashFiles('trivy-results.sarif') != '' }}
         with:
           sarif_file: trivy-results.sarif
       - uses: actions/upload-artifact@v4
+        if: ${{ always() && hashFiles('trivy-results.sarif') != '' }}
         with:
           name: trivy-results
           path: trivy-results.sarif
@@ -141,7 +152,13 @@ jobs:
       - name: Compute CBCS (baseline)
         run: |
           pip install -r metrics/requirements.txt
-          CSV=$(ls prowler-output/compliance/*"${CIS_COMPLIANCE}"*.csv | head -n1)
+          # Prowler's compliance CSV path/name varies by version (account id, date, and it may
+          # not sit under compliance/). Locate it recursively rather than a fixed glob; dump the
+          # tree first so real filenames are visible in the log if the match still misses.
+          ls -R prowler-output || true
+          CSV=$(find prowler-output -type f -iname '*cis*3.0*.csv' | head -n1)
+          if [ -z "$CSV" ]; then echo "No CIS 3.0 compliance CSV found under prowler-output"; exit 1; fi
+          echo "Using compliance CSV: $CSV"
           python metrics/compute_metrics.py cbcs \
             --input "$CSV" \
             --output "metrics/data/cbcs_baseline_${TARGET_ENV}.json"
@@ -260,7 +277,7 @@ jobs:
           curl -sL https://github.com/DataDog/stratus-red-team/releases/latest/download/stratus-red-team_Linux_x86_64.tar.gz \
             | tar xz -C /usr/local/bin stratus
       - name: Wait for Wazuh manager (Env B detection gate)
-        if: ${{ github.event.inputs.apply == 'true' && env.TARGET_ENV == 'environment-b' }}
+        if: ${{ github.event.inputs.apply == 'true' && (github.event.inputs.environment || 'environment-b') == 'environment-b' }}
         run: |
           # Detonating before the manager is up would push its boot lag into t_detect and
           # inflate MTTD. Gate the cloud detonations until wazuh-manager is active so t_detect
@@ -382,7 +399,11 @@ jobs:
             --output-directory prowler-output-current || true
       - name: Compute CBCS (current) and CDI
         run: |
-          CSV=$(ls prowler-output-current/compliance/*"${CIS_COMPLIANCE}"*.csv | head -n1)
+          # Same robust lookup as the baseline job (recursive find, not a fixed compliance/ glob).
+          ls -R prowler-output-current || true
+          CSV=$(find prowler-output-current -type f -iname '*cis*3.0*.csv' | head -n1)
+          if [ -z "$CSV" ]; then echo "No CIS 3.0 compliance CSV found under prowler-output-current"; exit 1; fi
+          echo "Using compliance CSV: $CSV"
           python metrics/compute_metrics.py cbcs \
             --input "$CSV" \
             --output "metrics/data/cbcs_current_${TARGET_ENV}.json"
@@ -524,49 +545,63 @@ jobs:
             echo "No running Wazuh manager ($NP-wazuh) — deploy_wazuh likely false. Empty alerts.json."
             exit 0
           fi
-          # Remote command: keep alert lines whose "timestamp" value >= CUTOFF, then gzip|base64.
-          # substr offsets: `"timestamp":"` is 13 chars; RLENGTH-14 strips it + the closing quote.
-          # \$0 stays literal (awk field) rather than expanding as a shell arg; jq -n does the
-          # JSON escaping so the awk single-quotes/braces survive intact into --parameters.
-          REMOTE="awk -v c=\"$CUTOFF\" '{ if (match(\$0, /\"timestamp\":\"[^\"]+\"/)) { s=substr(\$0, RSTART+13, RLENGTH-14); if (s >= c) print } }' /var/ossec/logs/alerts/alerts.json 2>/dev/null | gzip -c | base64 -w0 || true"
-          PARAMS=$(jq -n --arg c "$REMOTE" '{commands: [$c]}')
-          # One SSM round-trip: run the filter on the host, pull gzip|base64 back into alerts.json.
-          pull() {
-            local cmd
-            cmd=$(aws ssm send-command --region "$AWS_REGION" \
-              --instance-ids "$IID" --document-name AWS-RunShellScript \
-              --parameters "$PARAMS" --query 'Command.CommandId' --output text) || return 1
+          # Build the host-side filter ONCE: keep only in-window alert lines (timestamp >= CUTOFF)
+          # that are one of OUR detection rules (100810-100814). Filtering to our rule ids server-
+          # side keeps the payload small and correct — compute_mttd only ever matches those ids, and
+          # a persistent manager writes many unrelated Wazuh alerts per window that would otherwise
+          # bloat (and previously truncated) the transfer. substr offsets: `"timestamp":"` is 13
+          # chars; RLENGTH-14 strips it + the closing quote. \$0 stays literal (awk field); jq -n
+          # JSON-escapes the whole command so the awk single-quotes/braces survive into --parameters.
+          AWK="awk -v c=\"$CUTOFF\" '/\"id\":\"10081[0-4]\"/ { if (match(\$0, /\"timestamp\":\"[^\"]+\"/)) { s=substr(\$0, RSTART+13, RLENGTH-14); if (s >= c) print } }' /var/ossec/logs/alerts/alerts.json 2>/dev/null"
+          RID="${GITHUB_RUN_ID:-$$}"
+          STAGE="/tmp/zt_alerts_${RID}.b64"
+          # Run an arbitrary remote command via SSM; echo its StandardOutputContent verbatim.
+          ssm_run() {
+            local p cid
+            p=$(jq -n --arg c "$1" '{commands: [$c]}')
+            cid=$(aws ssm send-command --region "$AWS_REGION" --instance-ids "$IID" \
+              --document-name AWS-RunShellScript --parameters "$p" \
+              --query 'Command.CommandId' --output text) || return 1
             aws ssm wait command-executed --region "$AWS_REGION" \
-              --command-id "$cmd" --instance-id "$IID" || true
+              --command-id "$cid" --instance-id "$IID" || true
             aws ssm get-command-invocation --region "$AWS_REGION" \
-              --command-id "$cmd" --instance-id "$IID" \
-              --query 'StandardOutputContent' --output text \
-              | tr -d '\n' | base64 -d 2>/dev/null | gunzip 2>/dev/null > alerts.json || true
+              --command-id "$cid" --instance-id "$IID" \
+              --query 'StandardOutputContent' --output text
           }
+          numeric() { case "$1" in ''|*[!0-9]*) echo 0 ;; *) echo "$1" ;; esac; }
           if [ "$TARGET_ENV" = "environment-b" ]; then
             # Detection settles late: CloudTrail delivers management events to S3 with ~5-15 min
-            # latency, then the wodle polls (1 min) and the rules fire. Poll the export until the
-            # alert count is non-zero AND stable across two consecutive reads (detections settled),
-            # or ~20 min elapses. Captures detections as soon as they land without a blind sleep,
-            # and bounds the worst case. If nothing ever detects (all techniques blocked), it runs
-            # the full window and exports 0 lines — a true coverage miss, not a premature sample.
+            # latency, then the wodle polls (1 min) and the rules fire. Poll a lightweight COUNT of
+            # OUR in-window detection alerts until it is non-zero AND stable across two reads
+            # (detections settled), or ~20 min elapses. Counting (not pulling) drives the wait, so a
+            # truncated transfer can never fake a stable count. If nothing ever detects, it runs the
+            # full window and exports 0 lines — a true coverage miss, not a premature sample.
             PREV=-1
             for i in $(seq 1 20); do
-              pull
-              CUR=$(wc -l < alerts.json)
-              echo "poll $i: alerts.json lines (since $CUTOFF) = $CUR"
+              CUR=$(numeric "$(ssm_run "$AWK | wc -l || echo 0" | tr -d '[:space:]')")
+              echo "poll $i: relevant in-window alerts (since $CUTOFF) = $CUR"
               if [ "$CUR" -gt 0 ] && [ "$CUR" -eq "$PREV" ]; then
-                echo "Alert count stable at $CUR — detections settled."
+                echo "Detection count stable at $CUR — settled."
                 break
               fi
               PREV=$CUR
               sleep 60
             done
-          else
-            # Env A: no CloudTrail -> no cloud detection by design. Single pull; coverage=0 is the
-            # finding (the perimeter baseline never detects), so there's nothing to wait for.
-            pull
           fi
+          # Stage the filtered+gzipped+base64 payload on the host, then pull it back in <24KB chunks
+          # so the SSM StandardOutputContent cap can NEVER truncate it (the old single-shot pull did,
+          # corrupting the last JSON line). LEN = staged byte length; cut -c walks it in fixed steps.
+          LEN=$(numeric "$(ssm_run "$AWK | gzip -c | base64 -w0 > $STAGE; wc -c < $STAGE || echo 0" | tr -d '[:space:]')")
+          : > alerts.b64
+          CHUNK=18000
+          OFF=0
+          while [ "$OFF" -lt "$LEN" ]; do
+            START=$((OFF + 1)); END=$((OFF + CHUNK))
+            ssm_run "cut -c ${START}-${END} $STAGE" | tr -d '\n' >> alerts.b64 || true
+            OFF=$((OFF + CHUNK))
+          done
+          base64 -d alerts.b64 2>/dev/null | gunzip 2>/dev/null > alerts.json || true
+          ssm_run "rm -f $STAGE" >/dev/null 2>&1 || true
           echo "alerts.json lines (since $CUTOFF): $(wc -l < alerts.json)"
       - uses: actions/upload-artifact@v4
         if: always()
