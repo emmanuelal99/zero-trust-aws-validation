@@ -115,8 +115,12 @@ jobs:
         if: always()
         run: ls -l trivy-results.sarif 2>/dev/null || echo "No SARIF produced (Trivy step failed early)."
       # Only upload when the SARIF actually exists, so a Trivy hiccup can't fail these steps.
+      # Code-scanning upload requires GitHub Advanced Security, which isn't available on this
+      # private repo -> "Resource not accessible by integration". Non-blocking: Trivy isn't one
+      # of the five metrics, and the SARIF is still retained via the upload-artifact step below.
       - uses: github/codeql-action/upload-sarif@v3
         if: ${{ always() && hashFiles('trivy-results.sarif') != '' }}
+        continue-on-error: true
         with:
           sarif_file: trivy-results.sarif
       - uses: actions/upload-artifact@v4
