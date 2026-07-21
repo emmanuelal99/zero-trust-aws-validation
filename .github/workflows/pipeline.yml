@@ -99,7 +99,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Trivy IaC scan
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: config
           scan-ref: terraform/
@@ -259,6 +259,37 @@ jobs:
         run: |
           curl -sL https://github.com/DataDog/stratus-red-team/releases/latest/download/stratus-red-team_Linux_x86_64.tar.gz \
             | tar xz -C /usr/local/bin stratus
+      - name: Wait for Wazuh manager (Env B detection gate)
+        if: ${{ github.event.inputs.apply == 'true' && env.TARGET_ENV == 'environment-b' }}
+        run: |
+          # Detonating before the manager is up would push its boot lag into t_detect and
+          # inflate MTTD. Gate the cloud detonations until wazuh-manager is active so t_detect
+          # reflects only CloudTrail delivery + wodle poll + rule match. Bounded (~15 min): if
+          # the manager never comes up we detonate anyway (MTTD then simply records the miss).
+          NP="${TARGET_ENV/environment-/env-}"
+          IID=$(aws ec2 describe-instances --region "$AWS_REGION" \
+            --filters "Name=tag:Name,Values=$NP-wazuh" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[0].Instances[0].InstanceId' --output text 2>/dev/null || echo None)
+          if [ "$IID" = "None" ] || [ -z "$IID" ]; then
+            echo "No running Wazuh manager ($NP-wazuh) — proceeding without detection gate."
+            exit 0
+          fi
+          for i in $(seq 1 30); do
+            CMD=$(aws ssm send-command --region "$AWS_REGION" \
+              --instance-ids "$IID" --document-name AWS-RunShellScript \
+              --parameters '{"commands":["systemctl is-active wazuh-manager || true"]}' \
+              --query 'Command.CommandId' --output text 2>/dev/null || echo "")
+            [ -z "$CMD" ] && { sleep 30; continue; }   # SSM agent not registered yet (still booting)
+            aws ssm wait command-executed --region "$AWS_REGION" \
+              --command-id "$CMD" --instance-id "$IID" || true
+            STATE=$(aws ssm get-command-invocation --region "$AWS_REGION" \
+              --command-id "$CMD" --instance-id "$IID" \
+              --query 'StandardOutputContent' --output text 2>/dev/null | tr -d '[:space:]' || echo "")
+            echo "attempt $i: wazuh-manager=$STATE"
+            [ "$STATE" = "active" ] && { echo "Wazuh manager active — detonating."; exit 0; }
+            sleep 30
+          done
+          echo "WARN: wazuh-manager not active after ~15 min — detonating anyway."
       - name: Run selected techniques
         run: |
           # Technique selection lives in security/stratus-red-team/; detonate + cleanup.
@@ -499,17 +530,43 @@ jobs:
           # JSON escaping so the awk single-quotes/braces survive intact into --parameters.
           REMOTE="awk -v c=\"$CUTOFF\" '{ if (match(\$0, /\"timestamp\":\"[^\"]+\"/)) { s=substr(\$0, RSTART+13, RLENGTH-14); if (s >= c) print } }' /var/ossec/logs/alerts/alerts.json 2>/dev/null | gzip -c | base64 -w0 || true"
           PARAMS=$(jq -n --arg c "$REMOTE" '{commands: [$c]}')
-          CMD=$(aws ssm send-command --region "$AWS_REGION" \
-            --instance-ids "$IID" \
-            --document-name AWS-RunShellScript \
-            --parameters "$PARAMS" \
-            --query 'Command.CommandId' --output text)
-          aws ssm wait command-executed --region "$AWS_REGION" \
-            --command-id "$CMD" --instance-id "$IID" || true
-          aws ssm get-command-invocation --region "$AWS_REGION" \
-            --command-id "$CMD" --instance-id "$IID" \
-            --query 'StandardOutputContent' --output text \
-            | tr -d '\n' | base64 -d 2>/dev/null | gunzip 2>/dev/null > alerts.json || true
+          # One SSM round-trip: run the filter on the host, pull gzip|base64 back into alerts.json.
+          pull() {
+            local cmd
+            cmd=$(aws ssm send-command --region "$AWS_REGION" \
+              --instance-ids "$IID" --document-name AWS-RunShellScript \
+              --parameters "$PARAMS" --query 'Command.CommandId' --output text) || return 1
+            aws ssm wait command-executed --region "$AWS_REGION" \
+              --command-id "$cmd" --instance-id "$IID" || true
+            aws ssm get-command-invocation --region "$AWS_REGION" \
+              --command-id "$cmd" --instance-id "$IID" \
+              --query 'StandardOutputContent' --output text \
+              | tr -d '\n' | base64 -d 2>/dev/null | gunzip 2>/dev/null > alerts.json || true
+          }
+          if [ "$TARGET_ENV" = "environment-b" ]; then
+            # Detection settles late: CloudTrail delivers management events to S3 with ~5-15 min
+            # latency, then the wodle polls (1 min) and the rules fire. Poll the export until the
+            # alert count is non-zero AND stable across two consecutive reads (detections settled),
+            # or ~20 min elapses. Captures detections as soon as they land without a blind sleep,
+            # and bounds the worst case. If nothing ever detects (all techniques blocked), it runs
+            # the full window and exports 0 lines — a true coverage miss, not a premature sample.
+            PREV=-1
+            for i in $(seq 1 20); do
+              pull
+              CUR=$(wc -l < alerts.json)
+              echo "poll $i: alerts.json lines (since $CUTOFF) = $CUR"
+              if [ "$CUR" -gt 0 ] && [ "$CUR" -eq "$PREV" ]; then
+                echo "Alert count stable at $CUR — detections settled."
+                break
+              fi
+              PREV=$CUR
+              sleep 60
+            done
+          else
+            # Env A: no CloudTrail -> no cloud detection by design. Single pull; coverage=0 is the
+            # finding (the perimeter baseline never detects), so there's nothing to wait for.
+            pull
+          fi
           echo "alerts.json lines (since $CUTOFF): $(wc -l < alerts.json)"
       - uses: actions/upload-artifact@v4
         if: always()

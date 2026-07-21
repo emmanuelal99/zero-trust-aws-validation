@@ -141,7 +141,10 @@ resource "aws_instance" "wazuh" {
     # alerts by a UTC cutoff, and Wazuh writes timestamps in the host's local zone.
     timedatectl set-timezone UTC || true
     dnf -y update
-    curl -sO https://packages.wazuh.com/4.9/wazuh-install.sh
+    # Fresh private-subnet instances reach the internet via NAT; the first outbound
+    # request can race NAT/route readiness. Retry and fail loud (-sSf) so a transient
+    # timeout can't silently skip the whole install under set -e.
+    curl -sSfL --retry 5 --retry-delay 10 --retry-connrefused -o wazuh-install.sh https://packages.wazuh.com/4.9/wazuh-install.sh
     bash ./wazuh-install.sh -a -i || echo "WARN: wazuh-install returned non-zero"
     %{if local.cloud_detection~}
 
@@ -153,6 +156,9 @@ resource "aws_instance" "wazuh" {
     # -----------------------------------------------------------------------
     # Custom rules keyed on the CloudTrail event name (data.aws.eventName). if_sid
     # 80200 is Wazuh's base Amazon rule, so these only evaluate on decoded AWS events.
+    # Ensure the rules dir exists first so a partial install state can't abort the
+    # heredoc write under set -e.
+    mkdir -p /var/ossec/etc/rules
     cat > /var/ossec/etc/rules/local_rules.xml <<'XMLEOF'
     <group name="amazon,aws,cloudtrail,attack,">
       <rule id="100810" level="12">
