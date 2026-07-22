@@ -43,7 +43,7 @@ concurrency:
 env:
   AWS_REGION: eu-west-2
   TARGET_ENV: ${{ github.event.inputs.environment || 'environment-b' }}
-  CIS_COMPLIANCE: cis_3.0_aws_foundations
+  CIS_COMPLIANCE: cis_3.0_aws
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -148,11 +148,16 @@ jobs:
         run: pip install prowler
       - name: Run Prowler (CIS AWS Foundations)
         run: |
+          # --ignore-exit-code-3: Prowler exits 3 when checks FAIL (expected — that's the posture
+          # signal CBCS reads), so we neutralise only that. We do NOT blanket `|| true`: it swallows
+          # fatal argument/parse errors (exit 1/2) and made a bad --compliance value surface two
+          # steps later as a confusing "no CSV found".
           prowler aws \
             --compliance "$CIS_COMPLIANCE" \
             --region "$AWS_REGION" \
             --output-formats csv json-ocsf \
-            --output-directory prowler-output || true
+            --output-directory prowler-output \
+            --ignore-exit-code-3
       - name: Compute CBCS (baseline)
         run: |
           pip install -r metrics/requirements.txt
@@ -396,11 +401,14 @@ jobs:
       - name: Re-run Prowler (post-drift)
         run: |
           pip install prowler
+          # --ignore-exit-code-3 (not `|| true`): neutralise only the expected "checks failed" exit
+          # so genuine argument/parse errors still fail loudly here rather than downstream.
           prowler aws \
             --compliance "$CIS_COMPLIANCE" \
             --region "$AWS_REGION" \
             --output-formats csv \
-            --output-directory prowler-output-current || true
+            --output-directory prowler-output-current \
+            --ignore-exit-code-3
       - name: Compute CBCS (current) and CDI
         run: |
           # Same robust lookup as the baseline job (recursive find, not a fixed compliance/ glob).
