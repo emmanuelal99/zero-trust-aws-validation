@@ -545,6 +545,20 @@ def _alert_mitre_ids(alert: dict) -> set[str]:
     return {str(i) for i in ids}
 
 
+def _signature_matches(alert: dict, sig: dict) -> bool:
+    """Does an alert satisfy a signature? rule_ids take strict precedence over mitre_ids.
+
+    When a signature names specific Wazuh rule ids, ONLY the rule id may match. MITRE ids are
+    a fallback for signatures that declare no rule ids, because an ATT&CK technique id is not
+    unique to one rule: 100810 (CloudTrail StopLogging) and 100811 (DeleteTrail) both carry
+    T1562.008, so an OR over mitre_ids let either rule's alert satisfy either technique and
+    cross-attributed detections between the cloudtrail-stop and cloudtrail-delete actions.
+    """
+    if sig["rule_ids"]:
+        return alert["rule_id"] in sig["rule_ids"]
+    return bool(alert["mitre_ids"] & sig["mitre_ids"])
+
+
 def compute_mttd(actions_path: Path, alerts_path: Path, signatures_path: Path) -> dict:
     """MTTD from an attack-action log vs Wazuh alerts, correlated by signature map."""
     sig_spec = yaml.safe_load(signatures_path.read_text()) or {}
@@ -576,25 +590,36 @@ def compute_mttd(actions_path: Path, alerts_path: Path, signatures_path: Path) -
 
     matched = []
     unmatched = []
-    for action in actions:
+    claimed: set[int] = set()
+    # Assign in chronological order of execution so the earliest action claims the earliest
+    # eligible alert. Each alert is consumed at most once: a single detection cannot be
+    # evidence for two separate actions, and allowing reuse would let one alert inflate
+    # n_detected across repeated detonations of the same technique.
+    for t_exec, action in sorted(
+        ((_parse_ts(a["t_execute"]), a) for a in actions), key=lambda pair: pair[0]
+    ):
         tech = action.get("technique")
-        t_exec = _parse_ts(action["t_execute"])
         sig = sig_by_tech.get(tech, {"rule_ids": set(), "mitre_ids": set()})
         best = None
-        for al in parsed_alerts:
+        for idx, al in enumerate(parsed_alerts):
+            if idx in claimed:
+                continue  # already attributed to an earlier action
             if al["time"] < t_exec:
                 continue  # a detection cannot precede the action
-            if al["rule_id"] in sig["rule_ids"] or (al["mitre_ids"] & sig["mitre_ids"]):
-                if best is None or al["time"] < best["time"]:
-                    best = al
+            if not _signature_matches(al, sig):
+                continue
+            if best is None or al["time"] < parsed_alerts[best]["time"]:
+                best = idx
         if best is None:
             unmatched.append(action.get("action_id", tech))
         else:
+            claimed.add(best)
+            alert = parsed_alerts[best]
             matched.append({
                 "action_id": action.get("action_id", tech),
                 "technique": tech,
-                "delay_seconds": (best["time"] - t_exec).total_seconds(),
-                "rule_id": best["rule_id"],
+                "delay_seconds": (alert["time"] - t_exec).total_seconds(),
+                "rule_id": alert["rule_id"],
             })
 
     n_attempted = len(actions)

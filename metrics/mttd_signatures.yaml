@@ -1,19 +1,28 @@
 # MTTD — signature map correlating attack actions to Wazuh alerts.
 #
 # Because the attacker (Nuclei/Stratus) and the detector (Wazuh) share no trace/correlation
-# ID, an action is matched to a detection by SIGNATURE: the Wazuh alert's rule id and/or
-# MITRE ATT&CK technique id. For each attack action (keyed by its `technique`), the earliest
-# Wazuh alert at or after t_execute whose rule_id ∈ rule_ids OR mitre_ids ∩ mitre_ids is the
+# ID, an action is matched to a detection by SIGNATURE: the Wazuh alert's rule id, falling
+# back to its MITRE ATT&CK technique id. For each attack action (keyed by its `technique`),
+# the earliest unclaimed Wazuh alert at or after t_execute matching the signature is the
 # detection. t_detect - t_execute is that action's detection delay.
 #
-# LIMITATION to document in the methodology: signature correlation can mis-attribute an
-# alert to the wrong action if two actions share a signature within a short window. This is
-# a small, acknowledged risk versus a shared trace ID.
+# MATCHING PRECEDENCE: when an entry declares a non-empty `rule_ids`, ONLY the rule id is
+# used; `mitre_ids` applies solely as a fallback for entries with an empty `rule_ids`. A
+# technique id is not unique to one rule — 100810 (StopLogging) and 100811 (DeleteTrail)
+# both carry T1562.008 — so matching on either field would cross-attribute their alerts
+# between the cloudtrail-stop and cloudtrail-delete techniques.
+#
+# Each alert is consumed at most once: one detection cannot evidence two separate actions.
+# Actions are assigned in chronological order of t_execute, so the earliest action claims
+# the earliest eligible alert.
+#
+# LIMITATION to document in the methodology: signature correlation can still mis-attribute
+# an alert if the SAME technique is detonated twice within one detection window. This is a
+# small, acknowledged risk versus a shared trace ID.
 #
 # rule_ids are the custom Wazuh local rules authored in terraform/modules/wazuh/main.tf
 # (local_rules.xml, ids 100810-100814), each keyed on the CloudTrail data.aws.eventName and
-# tagged with the matching MITRE technique. An action matches on rule_id OR mitre_id, so the
-# metric still resolves if only one field is present in a given alert.
+# tagged with the matching MITRE technique.
 # `technique` must match the `technique` field emitted in attack_actions.jsonl exactly
 # (Stratus: the attack id; Nuclei: use the form "nuclei:<template-id>").
 
