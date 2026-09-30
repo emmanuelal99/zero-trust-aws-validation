@@ -1,7 +1,7 @@
 # Zero Trust vs Perimeter — Automated Pentest Evaluation Environment
 
 
-![CZTVF UML component view](images/CZTVF_UML_Component_View.svg)
+![CZTVF UML component view](docs/images/CZTVF_UML_Component_View.svg)
 
 *Figure: UML component and deployment view of the Continuous Zero Trust Validation Framework (CZTVF) in AWS eu-west-2.*
 
