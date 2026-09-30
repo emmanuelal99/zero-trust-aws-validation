@@ -1,6 +1,18 @@
 # Zero Trust vs Perimeter — Automated Pentest Evaluation Environment
 
-Technical environment for the MSc dissertation:
+
+![CZTVF UML component view](images/CZTVF_UML_Component_View.svg)
+
+*Figure: UML component and deployment view of the Continuous Zero Trust Validation Framework (CZTVF) in AWS eu-west-2.*
+
+A GitHub Actions workflow (`pipeline.yml`) authenticates to AWS through OIDC federation, so it uses short-lived STS credentials and stores no access keys. Terraform then provisions two environments running the same Logi-Track Django workload:
+
+- **Environment A (perimeter baseline):** a public EC2 tier with open SSH, a publicly accessible and unencrypted RDS database, flat networking, broad IAM permissions and no WAF or logging.
+- **Environment B (zero trust treatment):** only the WAF, ALB and NAT gateway are public. The application, Wazuh and RDS sit in private subnets. It adds least-privilege IAM with temporary credentials, multi-region CloudTrail, VPC Flow Logs, Secrets Manager with KMS, Session Manager as the only admin path, and Wazuh monitoring.
+
+Both environments go through the same validation process. Trivy, Prowler, Nuclei, Stratus Red Team and a Terraform drift check run in parallel. Their findings flow into Wazuh and are exported as versioned metrics (ASR, CDI and MTTD), so each run can be compared directly between the two environments.
+
+# Technical environment for the MSc dissertation:
 **"Evaluating the Effectiveness of Zero Trust Security Controls Through Automated Penetration Testing in a Cloud-Based SME Environment."**
 
 Two AWS environments host the same Django app (**Logi-Track**) and are attacked by an
